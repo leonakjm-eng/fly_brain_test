@@ -40,10 +40,30 @@ export class HybridNavigator {
     const angle = Math.atan2(currentDir.x, currentDir.z);
     const worldRepulsion = localRepulsion.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
 
-    // Vector_Final = Normalize(0.6 * Vector_A* + 0.4 * Vector_Repulsion)
+    // Calculate minimum distance based on sensors (normalized 0..1, multiply by MAX_RANGE)
+    const dMin = Math.min(sensors.front, sensors.left, sensors.right) * CONSTANTS.RAY_MAX_RANGE;
+
+    // Dynamic Urgency Blending
+    let weightAStar = 0.0;
+    let weightCX = 0.0;
+
+    if (dMin > 1.5) {
+      // Safe zone
+      weightAStar = 0.8;
+      weightCX = 0.2;
+    } else if (dMin > 0.7 && dMin <= 1.5) {
+      // Warning zone
+      weightAStar = 0.3;
+      weightCX = 0.7;
+    } else {
+      // Emergency zone (dMin <= 0.7)
+      weightAStar = 0.0;
+      weightCX = 1.0;
+    }
+
     const vectorFinal = new THREE.Vector3()
-      .addScaledVector(vectorAStar, 0.6)
-      .addScaledVector(worldRepulsion, 0.4);
+      .addScaledVector(vectorAStar, weightAStar)
+      .addScaledVector(worldRepulsion, weightCX);
 
     if (vectorFinal.lengthSq() > 0) {
       vectorFinal.normalize();
