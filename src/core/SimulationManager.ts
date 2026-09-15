@@ -54,6 +54,7 @@ export class SimulationManager {
 
   public setMode(mode: NavigationMode): void {
     this.mode = mode;
+    this.viewer.clearPath();
   }
 
   public setStartPoint(pos: THREE.Vector3): void {
@@ -117,6 +118,7 @@ export class SimulationManager {
         return;
       }
       this.currentWaypointIndex = 0;
+      this.viewer.drawPath(this.currentPath);
     }
 
     this.simulationTime = 0;
@@ -132,6 +134,7 @@ export class SimulationManager {
     if (this.startPoint) {
       this.robot.resetTransform(this.startPoint);
     }
+    this.viewer.clearPath();
   }
 
   public update(dt: number): void {

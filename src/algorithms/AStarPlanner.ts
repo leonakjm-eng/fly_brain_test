@@ -88,6 +88,38 @@ export class AStarPlanner {
         };
       }
     }
+
+    // 2nd Inflation Pass
+    const ROBOT_RADIUS = 0.35;
+    const inflatedNodes = new Set<GridNode>();
+
+    for (let x = 0; x < this.gridWidth; x++) {
+      for (let z = 0; z < this.gridDepth; z++) {
+        const node = this.grid[x][z];
+        if (!node.walkable) {
+          // Check 8 neighbors
+          for (let nx = -1; nx <= 1; nx++) {
+            for (let nz = -1; nz <= 1; nz++) {
+              if (nx === 0 && nz === 0) continue;
+              const checkX = x + nx;
+              const checkZ = z + nz;
+
+              if (checkX >= 0 && checkX < this.gridWidth && checkZ >= 0 && checkZ < this.gridDepth) {
+                const neighbor = this.grid[checkX][checkZ];
+                if (neighbor.walkable) {
+                  const dist = Math.hypot(neighbor.worldX - node.worldX, neighbor.worldZ - node.worldZ);
+                  if (dist <= ROBOT_RADIUS) {
+                    inflatedNodes.add(neighbor);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    inflatedNodes.forEach(node => node.walkable = false);
   }
 
   private getNodeFromWorld(worldPos: THREE.Vector3): GridNode | null {
