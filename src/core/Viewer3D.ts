@@ -16,6 +16,8 @@ export class Viewer3D {
   // Testbed elements tracking
   private testbedGroup: THREE.Group = new THREE.Group();
 
+  private pathLine: THREE.Line | null = null;
+
   constructor() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x333333);
@@ -94,7 +96,41 @@ export class Viewer3D {
     return null;
   }
 
+  public drawPath(waypoints: THREE.Vector3[]): void {
+    this.clearPath();
+
+    if (!waypoints || waypoints.length < 2) return;
+
+    // +0.02 offset to prevent Z-fighting
+    const points = waypoints.map(p => new THREE.Vector3(p.x, p.y + 0.02, p.z));
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color: 0x00ffff,
+      linewidth: 2,
+      depthTest: true
+    });
+
+    this.pathLine = new THREE.Line(geometry, material);
+    this.scene.add(this.pathLine);
+  }
+
+  public clearPath(): void {
+    if (this.pathLine) {
+      this.scene.remove(this.pathLine);
+      this.pathLine.geometry.dispose();
+      if (Array.isArray(this.pathLine.material)) {
+        this.pathLine.material.forEach(m => m.dispose());
+      } else {
+        this.pathLine.material.dispose();
+      }
+      this.pathLine = null;
+    }
+  }
+
   public clearTestbed(): void {
+    this.clearPath();
+
     // Traverse and dispose to prevent memory leaks (Rule 1)
     this.testbedGroup.children.forEach(child => {
       AssetLoader.disposeObject(child);

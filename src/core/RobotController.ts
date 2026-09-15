@@ -92,7 +92,7 @@ export class RobotController {
     }
   }
 
-  public castSensors(obstacles: THREE.Object3D[]): RaycastSensors {
+  public castSensors(obstacles: THREE.Object3D[] = []): RaycastSensors {
     // Current position and forward vector
     const pos = this.mesh.position.clone();
     pos.y += 0.2; // Cast from slightly above ground
@@ -133,6 +133,16 @@ export class RobotController {
     // Rotation (kinematic, apply directly to mesh)
     if (cmd.angularVelocity !== 0) {
       this.mesh.rotateY(cmd.angularVelocity * dt);
+    }
+
+    const STOP_DISTANCE = 0.35;
+    const MAX_RAY_DISTANCE = 3.0;
+
+    // Evaluate front distance for collision prevention
+    const sensors = this.castSensors(this.mesh.parent ? this.mesh.parent.children : []);
+
+    if (sensors.front <= (STOP_DISTANCE / MAX_RAY_DISTANCE) && cmd.linearVelocity > 0) {
+      cmd.linearVelocity = 0;
     }
 
     // Translation (kinematic forward)
