@@ -6,6 +6,7 @@ import { RobotController } from './RobotController';
 import { AStarPlanner } from '../algorithms/AStarPlanner';
 import { FlyNeuralNetwork } from '../algorithms/FlyNeuralNetwork';
 import { HybridNavigator } from '../algorithms/HybridNavigator';
+import { TestbedGenerator, DynamicObstacle } from './TestbedGenerator';
 
 export class SimulationManager {
   private mode: NavigationMode = NavigationMode.HYBRID;
@@ -34,6 +35,8 @@ export class SimulationManager {
   // Callbacks
   public onStateChange?: (state: SimState) => void;
 
+  private dynamicObstacles: DynamicObstacle[] = [];
+
   constructor(viewer: Viewer3D, robot: RobotController) {
     this.viewer = viewer;
     this.robot = robot;
@@ -41,6 +44,12 @@ export class SimulationManager {
     this.aStar = new AStarPlanner();
     this.flyNet = new FlyNeuralNetwork();
     this.hybridNav = new HybridNavigator();
+
+    // Create default testbed
+    const testbed = TestbedGenerator.createMazeWithDynamicObstacles();
+    this.dynamicObstacles = testbed.dynamicObstacles;
+    this.viewer.addTestbedObject(testbed.testbedGroup);
+    this.prepareEnvironment(testbed.walkableGround, this.viewer.getTestbedObjects());
   }
 
   public setMode(mode: NavigationMode): void {
@@ -136,42 +145,16 @@ export class SimulationManager {
     const currentPos = this.robot.getPosition();
     const currentDir = this.robot.getForwardVector();
 
-    // 1. Check Success (Goal reached)
-    if (this.endPoint && currentPos.distanceTo(this.endPoint) <= CONSTANTS.GOAL_THRESHOLD) {
-      this.robot.setAnimation('Idle');
-      this.changeState(SimState.SUCCESS);
-      return;
+    // 1. Update dynamic objects
+    for (const obs of this.dynamicObstacles) {
+      obs.update(clampedDt);
     }
 
-    // 2. Check Failures
-    // Timeout
-    if (this.simulationTime > CONSTANTS.SIM_TIMEOUT_SEC) {
-      this.robot.setAnimation('Idle');
-      this.changeState(SimState.FAILED_TIMEOUT);
-      return;
-    }
-    // Out of bounds
-    if (currentPos.y < -2.0) {
-      this.changeState(SimState.FAILED_OOB);
-      return;
-    }
-    // Stall checking
-    if (this.simulationTime - this.lastStallCheckTime > CONSTANTS.STALL_CHECK_WINDOW) {
-      const distMoved = currentPos.distanceTo(this.lastStallCheckPos);
-      if (distMoved < CONSTANTS.STALL_DISTANCE_MIN) {
-        this.robot.setAnimation('Idle');
-        this.changeState(SimState.FAILED_STALLED);
-        return;
-      }
-      this.lastStallCheckTime = this.simulationTime;
-      this.lastStallCheckPos.copy(currentPos);
-    }
-
-    // 3. Update Sensors
+    // 2. Update Sensors
     const obstacles = this.viewer.getTestbedObjects();
     const sensors = this.robot.castSensors(obstacles);
 
-    // 4. Compute Navigation Command
+    // 3. Compute Navigation Command
     let cmd = { linearVelocity: 0, angularVelocity: 0 };
 
     if (this.mode === NavigationMode.ASTAR) {
@@ -213,7 +196,36 @@ export class SimulationManager {
       cmd = this.hybridNav.computeCommand(currentPos, currentDir, targetWp, sensors, clampedDt);
     }
 
-    // 5. Apply Command
+    // 4. Apply Command
     this.robot.applyCommand(cmd, clampedDt);
+
+    // 5. Check Success and Failures (Goal, Stall, Timeout, OOB)
+    if (this.endPoint && currentPos.distanceTo(this.endPoint) <= CONSTANTS.GOAL_THRESHOLD) {
+      this.robot.setAnimation('Idle');
+      this.changeState(SimState.SUCCESS);
+      return;
+    }
+
+    if (this.simulationTime > CONSTANTS.SIM_TIMEOUT_SEC) {
+      this.robot.setAnimation('Idle');
+      this.changeState(SimState.FAILED_TIMEOUT);
+      return;
+    }
+
+    if (currentPos.y < -2.0) {
+      this.changeState(SimState.FAILED_OOB);
+      return;
+    }
+
+    if (this.simulationTime - this.lastStallCheckTime > CONSTANTS.STALL_CHECK_WINDOW) {
+      const distMoved = currentPos.distanceTo(this.lastStallCheckPos);
+      if (distMoved < CONSTANTS.STALL_DISTANCE_MIN) {
+        this.robot.setAnimation('Idle');
+        this.changeState(SimState.FAILED_STALLED);
+        return;
+      }
+      this.lastStallCheckTime = this.simulationTime;
+      this.lastStallCheckPos.copy(currentPos);
+    }
   }
 }

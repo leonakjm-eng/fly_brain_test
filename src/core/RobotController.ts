@@ -2,12 +2,15 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RaycastSensors, NavCommand } from '../types/index';
 import { CONSTANTS } from '../types/constants';
+import { QuadrupedRobotFactory } from './QuadrupedRobotFactory';
+import { RobotGaitAnimator } from './RobotGaitAnimator';
 
 export class RobotController {
   public mesh: THREE.Group = new THREE.Group();
   private mixer: THREE.AnimationMixer | null = null;
   private walkAction: THREE.AnimationAction | null = null;
   private idleAction: THREE.AnimationAction | null = null;
+  private gaitAnimator: RobotGaitAnimator;
 
   private raycasterFront: THREE.Raycaster;
   private raycasterLeft: THREE.Raycaster;
@@ -27,12 +30,13 @@ export class RobotController {
     this.raycasterLeft.far = CONSTANTS.RAY_MAX_RANGE;
     this.raycasterRight.far = CONSTANTS.RAY_MAX_RANGE;
 
-    // Create a fallback visual if no robot model is provided/loaded
-    const geo = new THREE.BoxGeometry(0.4, 0.4, 0.8);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x0055ff });
-    const box = new THREE.Mesh(geo, mat);
-    box.position.y = 0.2; // raise half height
-    this.mesh.add(box);
+    // Use actual Quadruped Robot Mesh
+    const robotInstance = QuadrupedRobotFactory.createQuadrupedRobot();
+    this.mesh.add(robotInstance.group);
+
+    // Setup Gait Animator
+    this.gaitAnimator = new RobotGaitAnimator();
+    this.gaitAnimator.setLegs(robotInstance.legs);
   }
 
   public async loadRobot(url: string): Promise<void> {
@@ -137,13 +141,19 @@ export class RobotController {
     }
 
     // Animation Sync
-    if (cmd.linearVelocity > 0.05) {
+    const isMoving = Math.abs(cmd.linearVelocity) > 0.05;
+    this.gaitAnimator.setWalking(isMoving);
+
+    if (isMoving) {
         if (!this.walkAction?.isRunning()) this.setAnimation('Walk');
         this.updateAnimation(dt, cmd.linearVelocity);
     } else {
         if (!this.idleAction?.isRunning()) this.setAnimation('Idle');
         this.updateAnimation(dt, 0);
     }
+
+    // Update procedural leg animation based on speed
+    this.gaitAnimator.update(dt, cmd.linearVelocity);
   }
 
   public resetTransform(pos: THREE.Vector3): void {
