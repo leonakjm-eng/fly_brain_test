@@ -37,6 +37,40 @@ export class SimulationManager {
 
   private dynamicObstacles: DynamicObstacle[] = [];
 
+  private resolveDynamicCollisions(dt: number): void {
+    const robotPos = this.robot.getPosition();
+    const robotRadius = 0.35;
+    const obstacleRadius = 0.30;
+    const minDist = robotRadius + obstacleRadius; // 0.65m
+
+    for (const obs of this.dynamicObstacles) {
+      const obsPos = obs.mesh.position;
+      const dx = robotPos.x - obsPos.x;
+      const dz = robotPos.z - obsPos.z;
+      const dist2D = Math.sqrt(dx * dx + dz * dz);
+
+      if (dist2D < minDist && dist2D > 0.0001) {
+        const overlap = minDist - dist2D;
+        const nx = dx / dist2D;
+        const nz = dz / dist2D;
+
+        // 겹친 깊이만큼 로봇을 장애물 반대 방향으로 즉각 밀어내어 관통 원천 차단
+        this.robot.mesh.position.x += nx * overlap;
+        this.robot.mesh.position.z += nz * overlap;
+
+        // 동적 장애물에 상호작용 반전/일시정지 신호 부여 가능 시 트리거
+        if (typeof (obs as any).onCollision === 'function') {
+          (obs as any).onCollision();
+        }
+      }
+
+      // 동적 장애물 상호작용: 거리 <= 0.7m 이내라면 강제 이동 일시 대기 또는 반전
+      if (dist2D <= 0.7) {
+        obs.elapsedTime -= dt * 2;
+      }
+    }
+  }
+
   constructor(viewer: Viewer3D, robot: RobotController) {
     this.viewer = viewer;
     this.robot = robot;
@@ -217,6 +251,9 @@ export class SimulationManager {
 
     // 4. Apply Command
     this.robot.applyCommand(cmd, clampedDt);
+
+    // Resolve Dynamic Collisions & Ghosting geometrically
+    this.resolveDynamicCollisions(clampedDt);
 
     // 5. Check Success and Failures (Goal, Stall, Timeout, OOB)
     if (this.endPoint && currentPos.distanceTo(this.endPoint) <= CONSTANTS.GOAL_THRESHOLD) {

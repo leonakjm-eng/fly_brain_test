@@ -28,6 +28,9 @@ export class RobotController {
   private tempVec3 = new THREE.Vector3();
   private tempRepulsionDir = new THREE.Vector3();
 
+  private smoothedLinearVelocity: number = 0;
+  private smoothedAngularVelocity: number = 0;
+
   constructor() {
     this.raycasterFront = new THREE.Raycaster();
     this.raycasterLeft = new THREE.Raycaster();
@@ -140,13 +143,10 @@ export class RobotController {
   }
 
   public applyCommand(cmd: NavCommand, dt: number): void {
-    const STOP_DISTANCE = 0.35;
     const MAX_RAY_DISTANCE = CONSTANTS.RAY_MAX_RANGE; // Use constant
 
     // Bounding Sphere Proximity Guard for dynamic obstacles
-    const robotRadius = 0.35;
-    const obstacleRadius = 0.30;
-    const collisionDist = robotRadius + obstacleRadius;
+    const collisionDist = CONSTANTS.PROXIMITY_GUARD_RADIUS;
     const robotPos = this.mesh.position;
 
     for (const obs of this.cachedObstacles) {
@@ -182,35 +182,47 @@ export class RobotController {
 
     // Kinematic Safety Clamp based on front ray
     const actualFrontDistance = this.cachedSensors.front * MAX_RAY_DISTANCE;
-    if (actualFrontDistance < STOP_DISTANCE && cmd.linearVelocity > 0) {
-      cmd.linearVelocity = 0.0;
+
+    // Continuous Deceleration (Soft Buffer Zone)
+    let speedFactor = 1.0;
+    if (actualFrontDistance <= CONSTANTS.DECEL_ZONE_STOP) {
+      speedFactor = 0.0;
+    } else if (actualFrontDistance < CONSTANTS.DECEL_ZONE_START) {
+      speedFactor = (actualFrontDistance - CONSTANTS.DECEL_ZONE_STOP) /
+                    (CONSTANTS.DECEL_ZONE_START - CONSTANTS.DECEL_ZONE_STOP);
     }
+    const targetLinearVel = cmd.linearVelocity * Math.max(0.0, Math.min(1.0, speedFactor));
+
+    // Velocity Exponential Moving Average (EMA)
+    const alpha = CONSTANTS.VELOCITY_EMA_ALPHA;
+    this.smoothedLinearVelocity = (alpha * targetLinearVel) + ((1 - alpha) * this.smoothedLinearVelocity);
+    this.smoothedAngularVelocity = (alpha * cmd.angularVelocity) + ((1 - alpha) * this.smoothedAngularVelocity);
 
     // Rotation (kinematic, apply directly to mesh)
     // NOTE: Angular velocity is intentionally NOT blocked here to allow rotation and escaping!
-    if (cmd.angularVelocity !== 0) {
-      this.mesh.rotateY(cmd.angularVelocity * dt);
+    if (this.smoothedAngularVelocity !== 0) {
+      this.mesh.rotateY(this.smoothedAngularVelocity * dt);
     }
 
     // Translation (kinematic forward)
-    if (cmd.linearVelocity > 0) {
-      this.mesh.translateZ(cmd.linearVelocity * dt);
+    if (this.smoothedLinearVelocity > 0) {
+      this.mesh.translateZ(this.smoothedLinearVelocity * dt);
     }
 
     // Animation Sync
-    const isMoving = Math.abs(cmd.linearVelocity) > 0.05;
+    const isMoving = Math.abs(this.smoothedLinearVelocity) > 0.05;
     this.gaitAnimator.setWalking(isMoving);
 
     if (isMoving) {
         if (!this.walkAction?.isRunning()) this.setAnimation('Walk');
-        this.updateAnimation(dt, cmd.linearVelocity);
+        this.updateAnimation(dt, this.smoothedLinearVelocity);
     } else {
         if (!this.idleAction?.isRunning()) this.setAnimation('Idle');
         this.updateAnimation(dt, 0);
     }
 
     // Update procedural leg animation based on speed
-    this.gaitAnimator.update(dt, cmd.linearVelocity);
+    this.gaitAnimator.update(dt, this.smoothedLinearVelocity);
   }
 
   public resetTransform(pos: THREE.Vector3): void {
