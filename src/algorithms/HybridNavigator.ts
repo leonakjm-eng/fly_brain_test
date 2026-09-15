@@ -34,7 +34,12 @@ export class HybridNavigator {
     // Fly CX Vector (Repulsion)
     // The cxNetwork.computeRepulsion returns a vector relative to local forward (Z).
     // We need to transform it to world space based on currentDir.
-    const localRepulsion = this.cxNetwork.computeRepulsion(sensors);
+    let localRepulsion = this.cxNetwork.computeRepulsion(sensors);
+
+    if (localRepulsion.lengthSq() < 0.0025) {
+      const steerBias = sensors.left - sensors.right;
+      localRepulsion.set(steerBias, 0, -Math.max(0.1, sensors.front)).normalize();
+    }
 
     // Create a rotation matrix from currentDir (assuming currentDir is normalized and flat)
     const angle = Math.atan2(currentDir.x, currentDir.z);
@@ -48,17 +53,15 @@ export class HybridNavigator {
     let weightCX = 0.0;
 
     if (dMin > 1.5) {
-      // Safe zone
-      weightAStar = 0.8;
-      weightCX = 0.2;
-    } else if (dMin > 0.7 && dMin <= 1.5) {
-      // Warning zone
-      weightAStar = 0.3;
-      weightCX = 0.7;
+      weightAStar = 0.85;
+      weightCX = 0.15;
+    } else if (dMin <= 0.7) {
+      weightAStar = 0.15;
+      weightCX = 0.85;
     } else {
-      // Emergency zone (dMin <= 0.7)
-      weightAStar = 0.0;
-      weightCX = 1.0;
+      const t = (dMin - 0.7) / (1.5 - 0.7);
+      weightAStar = 0.15 + t * (0.85 - 0.15);
+      weightCX = 0.85 - t * (0.85 - 0.15);
     }
 
     const vectorFinal = new THREE.Vector3()
