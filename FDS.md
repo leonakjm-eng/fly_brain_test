@@ -5,8 +5,8 @@
 ## 1. 문서 메타데이터 및 버전 정보
 
 * **문서명:** Functional Design Specification (FDS) - Bio-Nav 4-Legged Simulation Sandbox
-* **버전:** `v0.1.0-draft`
-* **최종 수정일:** 2026-09-15
+* **버전:** `v0.2.0` #수정
+* **최종 수정일:** 2026-09-15 #수정
 * **작성자 (PM):** Gemini
 * **검토자 (기획/테스트):** 사용자 (User)
 * **개발자 (코더):** Jules
@@ -51,9 +51,11 @@ bio-nav-sandbox/
     │   ├── RobotController.ts     # 키네마틱 이동, 애니메이션 믹서, 레이캐스터 센서
     │   └── SimulationManager.ts   # 시뮬레이션 상태 머신, 루프 틱 오케스트레이터
     ├── algorithms/
-    │   ├── AStarPlanner.ts        # 2D 그리드 생성 및 A* 최단 경로 탐색
-    │   ├── FlyNeuralNetwork.ts    # 중심복합체(CX) LIF 기반 조향 SNN
-    │   └── HybridNavigator.ts     # A* 타깃 벡터와 SNN 회피 벡터 결합 제어
+    │   ├── weights/
+    │   │   └── cx_weights.json     # neuPrint 추출 초파리 CX 실제 시냅스 연결 행렬 #수정
+    │   ├── AStarPlanner.ts         # 2D 그리드 생성, AABB 교차 검출, 인플레이션 및 A* 경로 탐색 #수정
+    │   ├── FlyNeuralNetwork.ts     # Connectome 기반 링 어트랙터 및 LIF 조향 SNN #수정
+    │   └── HybridNavigator.ts      # 동적 긴급도 가중치 블렌딩 제어기 #수정
     └── ui/
         ├── ControlPanel.ts        # 좌측 DOM UI 생성, 상태 바인딩, 이벤트 리스너
         └── styles.css             # 플로팅 UI 및 HUD 스타일
@@ -141,10 +143,11 @@ bio-nav-sandbox/
 
 ### Phase 1: 테스트베드 3D/JSON 로딩 파이프라인
 
-1. 사용자가 파일을 선택하면 `AssetLoader`가 MIME 타입 및 확장자 분기 검사.
-2. 기존 씬에 등록된 테스트베드 객체 메모리 해제(`disposeMeshHierarchy`).
-3. 파싱 완료된 Mesh 객체를 씬 중심 $(0, 0, 0)$으로 정렬(Normalize Bounding Box).
-4. 로드된 지면/벽체 Mesh에 `userData.isObstacle = true`, 바닥 평면 Mesh에 `userData.isWalkable = true` 태그 주입.
+1. 사용자가 파일을 선택하면 `AssetLoader`가 MIME 타입 및 확장자 분기 검사를 수행합니다.
+2. 기존 씬에 등록된 테스트베드 객체 메모리 해제(`disposeMeshHierarchy`)를 필수 실행하여 WebGL 리소스를 완전 격리합니다.
+3. 파싱 완료된 Mesh 객체를 씬 중심 $(0, 0, 0)$으로 정렬하고 `updateMatrixWorld(true)`를 호출하여 월드 변환 행렬을 동기화합니다. #수정
+4. 로드된 계층 트리를 재귀 순회(`traverse`)하여 모든 렌더링 메시 노드에 `userData.isObstacle = true`, `userData.isStatic = true`를 강제 주입하고 로컬 AABB를 사전 생성합니다. #수정
+5. 바닥 평면 메시에 대해서는 `userData.isWalkable = true`를 부여합니다.
 
 ### Phase 2: Start / End 지점 마킹 인터랙션
 
@@ -161,33 +164,43 @@ bio-nav-sandbox/
 
 ```
 [Simulation Loop: dt]
-       │
-       ├─► Check Goal Distance <= 0.3m ──► [TRIGGER SUCCESS]
-       │
-       ├─► Update Sensors: Cast 3 Rays (Front, Left 30°, Right 30°)
-       │
-       ├─► Compute Direction Vector based on Mode:
-       │     ├─ A* Mode:
-       │     │    Look up next waypoint from AStarPlanner
-       │     │    Vector_Target = Normalize(Waypoint - CurrentPos)
-       │     │
-       │     ├─ Fly CX Mode:
-       │     │    Feed ray distances into FlyNeuralNetwork LIF matrix
-       │     │    Output: delta_yaw, forward_speed
-       │     │    Apply rotation & forward translation
-       │     │
-       │     └─ Hybrid Mode:
-       │          Vector_A* = Normalize(Waypoint - CurrentPos)
-       │          Vector_Repulsion = FlyNeuralNetwork.computeRepulsion(rays)
-       │          Vector_Final = Normalize(0.6 * Vector_A* + 0.4 * Vector_Repulsion)
-       │
-       ├─► Kinematic Transform:
-       │     Rotate robot towards Vector_Final (Slerp)
-       │     Translate forward: position += forward * speed * dt
-       │
-       └─► Animation Sync:
-             mixer.update(dt)
-             walkAction.timeScale = speed / BASE_SPEED
+│
+├─► 1. Update Dynamic Obstacles & Merge:
+│      dynamicObstacles.forEach(d => d.update(dt))
+│      currentObstacles = [...staticObstacles, ...dynamicMeshes] #수정
+│
+├─► 2. Check Goal Distance <= 0.3m ──► [TRIGGER SUCCESS]
+│
+├─► 3. Update Sensors:
+│      RobotController.castSensors(currentObstacles)
+│      (Front, Left 30°, Right 30° Raycast Distance) #수정
+│
+├─► 4. Compute Direction Vector based on Mode:
+│      ├─ A* Mode:
+│      │    AStarPlanner (AABB Box Intersect + 0.35m Inflation) 경로 추종 #수정
+│      │    Vector_Target = Normalize(Waypoint - CurrentPos)
+│      │
+│      ├─ Fly CX Mode:
+│      │    cx_weights.json 기반 LIF 적분 (Delta7 GABA 음수 가중치 적용) #수정
+│      │    출력: 좌/우 P-EG 뉴런 발화 편차 기반 delta_yaw, forward_speed #수정
+│      │
+│      └─ Hybrid Mode:
+│           최근접 장애물 거리(d_min) 기반 긴급도 계수(alpha) 산출 #수정
+│           - d_min > 1.5m:  Vector = 0.8 * A* + 0.2 * CX #수정
+│           - 0.7m < d_min <= 1.5m: Vector = 0.3 * A* + 0.7 * CX #수정
+│           - d_min <= 0.7m: Vector = 1.0 * CX (A* 무시 비상 회피) #수정
+│
+├─► 5. Kinematic Guard & Safety Clamp:
+│      - Proximity Guard: 동적 장애물 구체 거리 <= 0.65m 진입 시 linearVelocity = 0 및 반발 회전 인가 #수정
+│      - Safety Clamp: 전방 레이 실측 거리 < 0.35m 시 linearVelocity = 0 고정, 회전(angularVelocity)은 허용 #수정
+│
+├─► 6. Kinematic Transform & Animation Sync:
+│      Rotate robot towards Final_Vector (Slerp)
+│      position += forward * speed * dt
+│      gaitAnimator.update(speed, dt) #수정
+│
+└─► 7. Path Visualization:
+       Viewer3D.drawPath(waypoints) (바닥 Y+0.02m 오프셋, Z-Fighting 방지) #수정
 
 ```
 
@@ -269,6 +282,10 @@ export const CONSTANTS = {
   ROBOT_MAX_ROTATION_SPEED: 3.5,// 회전 속도 (rad/s)
   RAY_MAX_RANGE: 3.0,           // 레이캐스트 유효 감지 거리 (m)
   GRID_RESOLUTION: 0.5,         // A* 그리드 셀 크기 (m)
+  OBSTACLE_INFLATION_RADIUS: 0.35, // A* 그리드 장애물 인플레이션 반경 (m) #수정
+  SAFETY_STOP_DISTANCE: 0.35,   // 전방 장애물 키네마틱 정지 임계거리 (m) #수정
+  PROXIMITY_GUARD_RADIUS: 0.65, // 동적 장애물 구체 충돌 방지 반경 (로봇 0.35m + 장애물 0.3m) #수정
+  PATH_Y_OFFSET: 0.02,          // A* 경로 시각화 Z-Fighting 방지 Y축 오프셋 (m) #수정
   SIM_TIMEOUT_SEC: 120,         // 최대 주행 제한 시간 (초)
   STALL_CHECK_WINDOW: 3.0,      // 끼임 판정 대기 시간 (초)
   STALL_DISTANCE_MIN: 0.05      // 끼임 판정 이동 임계치 (m)
@@ -283,6 +300,8 @@ export const CONSTANTS = {
 * `render(): void`
 * `getIntersection(screenPos: { x: number, y: number }): THREE.Intersection | null`
 * `clearTestbed(): void`
+* `drawPath(waypoints: THREE.Vector3[]): void` #수정
+* `clearPath(): void` #수정
 
 
 * **`AssetLoader`**
@@ -330,6 +349,8 @@ export const CONSTANTS = {
 | **E-3** | A* 도달 불가 경로 (미로가 완전히 차단된 경우) | `AStarPlanner.findPath()` 반환 배열이 빈 배열임 | UI 상태창에 `"목적지까지 유효한 경로가 없습니다"` 경고 표시, 시뮬레이션 시작 차단. |
 | **E-4** | Fly CX 전방 대칭 장애물 교착 (U자형 정면 진입) | 좌/우 레이 거리 차이가 $0.05\text{m}$ 미만이고 전방이 막힘 | 각속도 명령에 난수 노이즈(`+0.5 rad/s` 우측 편향)를 강제 주입하여 대칭 회로 락 해제. |
 | **E-5** | 백그라운드 탭 렌더링 프레임 드롭 (dt 폭증 현상) | `clock.getDelta()` 값이 $0.1\text{초}$ 초과 | `dt = Math.min(dt, 0.05)`로 강제 클램핑하여 로봇이 벽을 뚫고 지나가는 터널링 방지. |
+| **E-6** | 동적 장애물이 로봇의 측·후방 사각지대에서 돌진 | 레이캐스터 미감지 및 Bounding Sphere 거리 $\le 0.65\text{m}$ 검출 | `linearVelocity = 0` 강제 클램프 및 장애물 역방향 탈출 각속도 즉시 인가. #수정 |
+| **E-7** | neuPrint 시냅스 가중치의 전부 양수(흥분성) 표기 | `cx_weights.json` 로드 시 Presynaptic 뉴런 타입 확인 | `Delta7` 뉴런 발 연결 가중치에 $-1.0$을 곱해 GABAergic 억제성 회로 자동 구성. #수정 |
 
 ---
 
