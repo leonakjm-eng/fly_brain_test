@@ -130,19 +130,22 @@ export class RobotController {
   }
 
   public applyCommand(cmd: NavCommand, dt: number): void {
-    // Rotation (kinematic, apply directly to mesh)
-    if (cmd.angularVelocity !== 0) {
-      this.mesh.rotateY(cmd.angularVelocity * dt);
+    const STOP_DISTANCE = 0.35;
+    const MAX_RAY_DISTANCE = CONSTANTS.RAY_MAX_RANGE; // Use constant
+
+    // Evaluate front distance for collision prevention BEFORE rotation to correctly clamp velocity based on what's immediately in front.
+    const sensors = this.castSensors(this.mesh.parent ? this.mesh.parent.children : []);
+    const actualFrontDistance = sensors.front * MAX_RAY_DISTANCE;
+
+    // Kinematic Safety Clamp
+    if (actualFrontDistance < STOP_DISTANCE && cmd.linearVelocity > 0) {
+      cmd.linearVelocity = 0.0;
     }
 
-    const STOP_DISTANCE = 0.35;
-    const MAX_RAY_DISTANCE = 3.0;
-
-    // Evaluate front distance for collision prevention
-    const sensors = this.castSensors(this.mesh.parent ? this.mesh.parent.children : []);
-
-    if (sensors.front <= (STOP_DISTANCE / MAX_RAY_DISTANCE) && cmd.linearVelocity > 0) {
-      cmd.linearVelocity = 0;
+    // Rotation (kinematic, apply directly to mesh)
+    // NOTE: Angular velocity is intentionally NOT blocked here to allow rotation and escaping!
+    if (cmd.angularVelocity !== 0) {
+      this.mesh.rotateY(cmd.angularVelocity * dt);
     }
 
     // Translation (kinematic forward)

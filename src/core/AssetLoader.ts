@@ -27,6 +27,20 @@ export class AssetLoader {
       }
 
       this.normalizeModel(result);
+
+      // Inject tags to all children
+      result.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (mesh.isMesh) {
+          mesh.userData.isObstacle = true;
+          mesh.userData.isStatic = true;
+          if (mesh.geometry) {
+            mesh.geometry.computeBoundingBox();
+          }
+          mesh.updateMatrixWorld(true);
+        }
+      });
+
       this.tagWalkableSurfaces(result);
 
       return result;

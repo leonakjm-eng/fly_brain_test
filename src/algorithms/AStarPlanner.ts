@@ -26,16 +26,18 @@ export class AStarPlanner {
     // Filter out dynamic obstacles at the entry point for optimization
     const staticObstacles = obstacles.filter(o => o.userData.isDynamic !== true);
 
-    // Compute max height from obstacles to ensure raycast starts above all obstacles
-    let maxY = 10;
-    if (staticObstacles.length > 0) {
-      const allObstaclesGroup = new THREE.Group();
-      staticObstacles.forEach(o => allObstaclesGroup.add(o.clone()));
-      const obBox = new THREE.Box3().setFromObject(allObstaclesGroup);
-      if (isFinite(obBox.max.y)) {
-        maxY = obBox.max.y + 1;
-      }
-    }
+    // Cache AABB of all valid meshes within obstacles
+    const obstacleBoxes: THREE.Box3[] = [];
+    staticObstacles.forEach(obs => {
+      obs.traverse((child) => {
+        if (child instanceof THREE.Mesh && (child.userData.isStatic || child.userData.isObstacle)) {
+          const meshBox = new THREE.Box3().setFromObject(child);
+          if (!meshBox.isEmpty()) {
+            obstacleBoxes.push(meshBox);
+          }
+        }
+      });
+    });
 
     // In case the bounding box is invalid or infinite
     if (!isFinite(box.min.x) || !isFinite(box.max.x)) {
@@ -51,29 +53,31 @@ export class AStarPlanner {
     this.gridDepth = Math.ceil(depth / CONSTANTS.GRID_RESOLUTION);
     this.grid = [];
 
-    // Raycaster for checking if a cell is blocked by an obstacle
-    const raycaster = new THREE.Raycaster();
+    const cellHalfW = CONSTANTS.GRID_RESOLUTION / 2;
+    const cellHalfH = 2.0 / 2; // Height 2.0m
+
+    // Scratch variables for memory leak prevention
+    const cellMin = new THREE.Vector3();
+    const cellMax = new THREE.Vector3();
+    const cellBox = new THREE.Box3();
 
     for (let x = 0; x < this.gridWidth; x++) {
       this.grid[x] = [];
       for (let z = 0; z < this.gridDepth; z++) {
-        const worldX = this.minX + x * CONSTANTS.GRID_RESOLUTION + CONSTANTS.GRID_RESOLUTION / 2;
-        const worldZ = this.minZ + z * CONSTANTS.GRID_RESOLUTION + CONSTANTS.GRID_RESOLUTION / 2;
+        const worldX = this.minX + x * CONSTANTS.GRID_RESOLUTION + cellHalfW;
+        const worldZ = this.minZ + z * CONSTANTS.GRID_RESOLUTION + cellHalfW;
+        const worldY = 1.0; // center at height 1.0m to span 0.0 to 2.0
 
         let walkable = true;
 
-        // Raycast down from above the cell to see if it hits an obstacle
-        const origin = new THREE.Vector3(worldX, maxY, worldZ);
-        raycaster.set(origin, new THREE.Vector3(0, -1, 0));
+        cellMin.set(worldX - cellHalfW, worldY - cellHalfH, worldZ - cellHalfW);
+        cellMax.set(worldX + cellHalfW, worldY + cellHalfH, worldZ + cellHalfW);
+        cellBox.set(cellMin, cellMax);
 
-        if (staticObstacles.length > 0) {
-          const intersects = raycaster.intersectObjects(staticObstacles, true);
-          const validIntersects = intersects.filter(hit =>
-            hit.object.userData.isStatic === true || hit.object.userData.isObstacle
-          );
-
-          if (validIntersects.length > 0) {
-             walkable = false;
+        for (const obsBox of obstacleBoxes) {
+          if (cellBox.intersectsBox(obsBox)) {
+            walkable = false;
+            break;
           }
         }
 
@@ -91,7 +95,7 @@ export class AStarPlanner {
 
     // 2nd Inflation Pass
     const ROBOT_RADIUS = 0.35;
-    const inflatedNodes = new Set<GridNode>();
+    const nodesToInflate: GridNode[] = [];
 
     for (let x = 0; x < this.gridWidth; x++) {
       for (let z = 0; z < this.gridDepth; z++) {
@@ -107,9 +111,13 @@ export class AStarPlanner {
               if (checkX >= 0 && checkX < this.gridWidth && checkZ >= 0 && checkZ < this.gridDepth) {
                 const neighbor = this.grid[checkX][checkZ];
                 if (neighbor.walkable) {
-                  const dist = Math.hypot(neighbor.worldX - node.worldX, neighbor.worldZ - node.worldZ);
+                  // Calculate distance from obstacle cell boundary to neighbor cell center
+                  const closestX = THREE.MathUtils.clamp(neighbor.worldX, node.worldX - cellHalfW, node.worldX + cellHalfW);
+                  const closestZ = THREE.MathUtils.clamp(neighbor.worldZ, node.worldZ - cellHalfW, node.worldZ + cellHalfW);
+                  const dist = Math.hypot(neighbor.worldX - closestX, neighbor.worldZ - closestZ);
+
                   if (dist <= ROBOT_RADIUS) {
-                    inflatedNodes.add(neighbor);
+                    nodesToInflate.push(neighbor);
                   }
                 }
               }
@@ -119,7 +127,9 @@ export class AStarPlanner {
       }
     }
 
-    inflatedNodes.forEach(node => node.walkable = false);
+    for (let i = 0; i < nodesToInflate.length; i++) {
+      nodesToInflate[i].walkable = false;
+    }
   }
 
   private getNodeFromWorld(worldPos: THREE.Vector3): GridNode | null {
