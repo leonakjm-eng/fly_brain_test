@@ -23,11 +23,14 @@ export class AStarPlanner {
   public buildGridFromScene(walkableMesh: THREE.Mesh, obstacles: THREE.Object3D[]): void {
     const box = new THREE.Box3().setFromObject(walkableMesh);
 
+    // Filter out dynamic obstacles at the entry point for optimization
+    const staticObstacles = obstacles.filter(o => o.userData.isDynamic !== true);
+
     // Compute max height from obstacles to ensure raycast starts above all obstacles
     let maxY = 10;
-    if (obstacles.length > 0) {
+    if (staticObstacles.length > 0) {
       const allObstaclesGroup = new THREE.Group();
-      obstacles.forEach(o => allObstaclesGroup.add(o.clone()));
+      staticObstacles.forEach(o => allObstaclesGroup.add(o.clone()));
       const obBox = new THREE.Box3().setFromObject(allObstaclesGroup);
       if (isFinite(obBox.max.y)) {
         maxY = obBox.max.y + 1;
@@ -63,9 +66,13 @@ export class AStarPlanner {
         const origin = new THREE.Vector3(worldX, maxY, worldZ);
         raycaster.set(origin, new THREE.Vector3(0, -1, 0));
 
-        if (obstacles.length > 0) {
-          const intersects = raycaster.intersectObjects(obstacles, true);
-          if (intersects.length > 0 && intersects[0].object.userData.isObstacle) {
+        if (staticObstacles.length > 0) {
+          const intersects = raycaster.intersectObjects(staticObstacles, true);
+          const validIntersects = intersects.filter(hit =>
+            hit.object.userData.isStatic === true || hit.object.userData.isObstacle
+          );
+
+          if (validIntersects.length > 0) {
              walkable = false;
           }
         }

@@ -33,3 +33,6 @@ export interface TestbedConfigJSON {
     size: [number, number, number];
   }>;
 }
+export interface RobotConfig { bodyColor?: string; cameraColor?: string; rtkAntennaColor?: string; legColor?: string; }
+export type MotionSpeedMultiplier = any;
+export type RobotMotionStatus = any;
