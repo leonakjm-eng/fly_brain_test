@@ -154,8 +154,24 @@ export class SimulationManager {
     }
 
     // 2. Update Sensors
-    const obstacles = this.viewer.getTestbedObjects();
-    const sensors = this.robot.castSensors(obstacles);
+    const staticObstacles = this.viewer.getTestbedObjects();
+
+    // Merge static and dynamic obstacles into a single array
+    const currentObstacles: THREE.Object3D[] = [...staticObstacles];
+    for (const obs of this.dynamicObstacles) {
+        if (!obs.mesh.userData.isObstacle) {
+            obs.mesh.userData.isObstacle = true;
+        }
+        if (!obs.mesh.userData.isDynamic) {
+            obs.mesh.userData.isDynamic = true;
+        }
+        // Ensure dynamic obstacles are included (avoiding duplicates if they are already in the testbed group)
+        if (!currentObstacles.includes(obs.mesh)) {
+            currentObstacles.push(obs.mesh);
+        }
+    }
+
+    const sensors = this.robot.castSensors(currentObstacles);
 
     // 3. Compute Navigation Command
     let cmd = { linearVelocity: 0, angularVelocity: 0 };

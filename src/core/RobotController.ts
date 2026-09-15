@@ -22,6 +22,12 @@ export class RobotController {
   private dirLeft = new THREE.Vector3();
   private dirRight = new THREE.Vector3();
 
+  // Cached state for applyCommand
+  private cachedObstacles: THREE.Object3D[] = [];
+  private cachedSensors: RaycastSensors = { front: 1.0, left: 1.0, right: 1.0 };
+  private tempVec3 = new THREE.Vector3();
+  private tempRepulsionDir = new THREE.Vector3();
+
   constructor() {
     this.raycasterFront = new THREE.Raycaster();
     this.raycasterLeft = new THREE.Raycaster();
@@ -93,6 +99,8 @@ export class RobotController {
   }
 
   public castSensors(obstacles: THREE.Object3D[] = []): RaycastSensors {
+    this.cachedObstacles = obstacles;
+
     // Current position and forward vector
     const pos = this.mesh.position.clone();
     pos.y += 0.2; // Cast from slightly above ground
@@ -122,22 +130,58 @@ export class RobotController {
       return 1.0;
     };
 
-    return {
+    this.cachedSensors = {
       front: getDist(this.raycasterFront),
       left: getDist(this.raycasterLeft),
       right: getDist(this.raycasterRight)
     };
+
+    return this.cachedSensors;
   }
 
   public applyCommand(cmd: NavCommand, dt: number): void {
     const STOP_DISTANCE = 0.35;
     const MAX_RAY_DISTANCE = CONSTANTS.RAY_MAX_RANGE; // Use constant
 
-    // Evaluate front distance for collision prevention BEFORE rotation to correctly clamp velocity based on what's immediately in front.
-    const sensors = this.castSensors(this.mesh.parent ? this.mesh.parent.children : []);
-    const actualFrontDistance = sensors.front * MAX_RAY_DISTANCE;
+    // Bounding Sphere Proximity Guard for dynamic obstacles
+    const robotRadius = 0.35;
+    const obstacleRadius = 0.30;
+    const collisionDist = robotRadius + obstacleRadius;
+    const robotPos = this.mesh.position;
 
-    // Kinematic Safety Clamp
+    for (const obs of this.cachedObstacles) {
+        if (obs.userData.isDynamic) {
+            // Calculate distance between robot center and obstacle center
+            // Get world position of obstacle in case it's nested (though testbed puts it at root)
+            obs.getWorldPosition(this.tempVec3);
+            const d = robotPos.distanceTo(this.tempVec3);
+
+            if (d <= collisionDist) {
+                // Proximity Guard triggered
+                cmd.linearVelocity = 0.0;
+
+                // Calculate repulsion vector from obstacle to robot
+                this.tempRepulsionDir.subVectors(robotPos, this.tempVec3);
+                this.tempRepulsionDir.y = 0; // Keep horizontal
+
+                if (this.tempRepulsionDir.lengthSq() > 0.001) {
+                    this.tempRepulsionDir.normalize();
+                    // Determine rotation direction
+                    const forwardVec = this.getForwardVector();
+                    forwardVec.y = 0;
+                    forwardVec.normalize();
+
+                    const crossY = forwardVec.z * this.tempRepulsionDir.x - forwardVec.x * this.tempRepulsionDir.z;
+                    // Apply a rotation to escape
+                    cmd.angularVelocity = crossY > 0 ? CONSTANTS.ROBOT_MAX_ROTATION_SPEED : -CONSTANTS.ROBOT_MAX_ROTATION_SPEED;
+                }
+                break; // Handle closest/first one and break
+            }
+        }
+    }
+
+    // Kinematic Safety Clamp based on front ray
+    const actualFrontDistance = this.cachedSensors.front * MAX_RAY_DISTANCE;
     if (actualFrontDistance < STOP_DISTANCE && cmd.linearVelocity > 0) {
       cmd.linearVelocity = 0.0;
     }
