@@ -49,7 +49,11 @@ export class RobotController {
   }
 
   public async loadRobot(url: string): Promise<void> {
-    return new Promise((resolve, reject) => {
+    if (url === '/models/default_robot.glb' || url.includes('default_robot.glb')) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
       const loader = new GLTFLoader();
       loader.load(url, (gltf) => {
         // Clear fallback
@@ -76,7 +80,10 @@ export class RobotController {
         }
 
         resolve();
-      }, undefined, reject);
+      }, undefined, (error) => {
+        console.warn(`[RobotController] GLTFLoader failed to load ${url}, keeping procedural mesh fallback.`, error);
+        resolve(); // resolve safely to avoid app crash
+      });
     });
   }
 
