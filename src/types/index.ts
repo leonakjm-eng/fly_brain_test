@@ -64,6 +64,7 @@ export interface TelemetryData {
   // AStar 전용 필드
   remainingDist?: number;
   isDecelerating?: boolean;
+  finishTime?: number;
 }
 
 export interface AgentContext {

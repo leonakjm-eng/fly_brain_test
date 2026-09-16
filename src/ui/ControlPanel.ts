@@ -5,6 +5,7 @@ export class ControlPanel {
 
   // Elements
   private modeRadios: HTMLInputElement[] = [];
+  private navModeHeader!: HTMLHeadingElement;
   private btnLoadTestbed!: HTMLButtonElement;
   private inputFileHidden!: HTMLInputElement;
   private labelTestbedInfo!: HTMLSpanElement;
@@ -45,7 +46,7 @@ export class ControlPanel {
       <h1>BIO-NAV CONTROLLER</h1>
 
       <div class="section">
-        <h2>[NAVIGATION MODE]</h2>
+        <h2 id="nav-mode-header">[NAVIGATION MODE]</h2>
         <div class="radio-group">
           <label><input type="radio" name="nav-mode" id="radio-mode-astar" value="${NavigationMode.ASTAR}"> A* Global Planner</label>
           <label><input type="radio" name="nav-mode" id="radio-mode-cx" value="${NavigationMode.FLY_CX}"> Fly CX SNN (Reactive)</label>
@@ -84,6 +85,7 @@ export class ControlPanel {
       document.getElementById('radio-mode-cx') as HTMLInputElement,
       document.getElementById('radio-mode-hybrid') as HTMLInputElement,
     ];
+    this.navModeHeader = document.getElementById('nav-mode-header') as HTMLHeadingElement;
     this.btnLoadTestbed = document.getElementById('btn-load-testbed') as HTMLButtonElement;
     this.inputFileHidden = document.getElementById('input-file-hidden') as HTMLInputElement;
     this.labelTestbedInfo = document.getElementById('label-testbed-info') as HTMLSpanElement;
@@ -93,11 +95,13 @@ export class ControlPanel {
     btnLoadPreset1.addEventListener('click', () => {
       if (this.onPresetSelect) this.onPresetSelect('SINGLE_MAZE');
       this.labelTestbedInfo.textContent = 'Current: [1차] 단일 미로';
+      this.setParallelMode(false);
     });
 
     btnLoadPreset2.addEventListener('click', () => {
       if (this.onPresetSelect) this.onPresetSelect('PARALLEL_RACE');
       this.labelTestbedInfo.textContent = 'Current: [2차] 3-레인 병렬 레이스';
+      this.setParallelMode(true);
     });
 
     this.btnSetStart = document.getElementById('btn-set-start') as HTMLButtonElement;
@@ -161,6 +165,16 @@ export class ControlPanel {
   private updateButtonStates() {
     this.btnSetStart.classList.toggle('active', this.isStartModeActive);
     this.btnSetEnd.classList.toggle('active', this.isEndModeActive);
+  }
+
+  public setParallelMode(active: boolean): void {
+    if (active) {
+      this.modeRadios.forEach(radio => radio.disabled = true);
+      this.navModeHeader.textContent = '[NAVIGATION MODE: PARALLEL RACE ACTIVE]';
+    } else {
+      this.modeRadios.forEach(radio => radio.disabled = false);
+      this.navModeHeader.textContent = '[NAVIGATION MODE]';
+    }
   }
 
   // Called by external systems to cancel modes (e.g. after successful placement)

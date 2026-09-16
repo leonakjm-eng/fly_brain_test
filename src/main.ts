@@ -52,6 +52,10 @@ function bindEvents() {
     simManager.setMode(mode);
   };
 
+  ui.onPresetSelect = async (preset) => {
+    await simManager.loadPreset(preset);
+  };
+
   ui.onFileSelect = async (file) => {
     try {
       ui.setTestbedInfo(`Loading ${file.name}...`);

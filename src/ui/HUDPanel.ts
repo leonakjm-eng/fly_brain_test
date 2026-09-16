@@ -84,11 +84,12 @@ export class HUDPanel {
 
     let html = '';
 
-    if (t.agentId === 'fly') {
+    if (t.mode === 'FLY_CX') {
       const headingDiff = t.headingErrorDeg > 0 ? `+${f(t.headingErrorDeg, 0)}` : f(t.headingErrorDeg, 0);
       const spikeStatus = t.membraneSpikeActive ? 'ACTIVE' : 'IDLE';
       const steerVal = t.angularVelocity > 0 ? `+${f(t.angularVelocity)}` : f(t.angularVelocity);
 
+      html += `<div class="hud-cyan"><span class="badge badge-fly">FLY CX SNN</span></div>`;
       html += `<div class="hud-cyan">Heading: ${f(t.headingDeg, 0)}° | Goal: ${f(t.targetHeadingDeg, 0)}° (Err: ${headingDiff}°)</div>`;
       html += `<div class="hud-yellow">Sensor: Front ${f(t.closestObstacleDist)}m | Spike: ${spikeStatus}</div>`;
       html += `<div class="hud-green">Steer: ${steerVal} rad/s | Speed: ${f(t.linearVelocity)} m/s</div>`;
@@ -96,8 +97,8 @@ export class HUDPanel {
       if (t.isEmergency) {
         html += `<div class="hud-red">EMERGENCY AVOIDANCE ACTIVE</div>`;
       }
-    } else if (t.agentId === 'astar') {
-      html += `<div class="hud-gray">Mode: A* Path Following</div>`;
+    } else if (t.mode === 'ASTAR') {
+      html += `<div class="hud-blue"><span class="badge badge-astar">A* GLOBAL PLANNER</span></div>`;
       html += `<div class="hud-gray">Speed: ${f(t.linearVelocity)} m/s</div>`;
       html += `<div class="hud-gray">Heading: ${f(t.headingDeg, 0)}°</div>`;
       html += `<div class="hud-gray">Remaining Dist: ${f(t.remainingDist)} m</div>`;
@@ -109,14 +110,18 @@ export class HUDPanel {
       } else {
          html += `<div class="hud-green">Status: ${t.statusText}</div>`;
       }
-    } else if (t.agentId === 'hybrid') {
-      html += `<div class="hud-gray">Mode: Hybrid Blend</div>`;
+    } else if (t.mode === 'HYBRID') {
+      html += `<div class="hud-amber"><span class="badge badge-hybrid">DYNAMIC HYBRID</span></div>`;
       html += `<div class="hud-yellow">Sensor: Front ${f(t.closestObstacleDist)}m</div>`;
       html += `<div class="hud-cyan">Blend Alpha (Avoidance): ${f(t.blendRatioAlpha)}</div>`;
       html += `<div class="hud-green">Speed: ${f(t.linearVelocity)} m/s</div>`;
       if (t.isEmergency) {
          html += `<div class="hud-red">EMERGENCY ACTIVE</div>`;
       }
+    }
+
+    if (t.statusText === 'Finished' && t.finishTime) {
+       html += `<div class="hud-green">Finished in ${f(t.finishTime)}s</div>`;
     }
 
     contentEl.innerHTML = html;

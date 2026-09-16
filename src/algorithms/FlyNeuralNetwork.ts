@@ -62,16 +62,8 @@ export class FlyNeuralNetwork {
         else if (type === 'P-EG') this.indicesPEG.push(index);
     });
 
-    // Fallback: if E-PG is empty, assign some Delta7 neurons to E-PG/PEG/PEN roles to keep simulation running
-    // based on typical 42-neuron CX models.
-    if (this.indicesEPG.length === 0) {
-      // Just manually distribute the 42 neurons evenly to satisfy the requirement
-      for (let i = 0; i < this.numNeurons; i++) {
-        if (i < 10) this.indicesEPG.push(i);
-        else if (i < 20) this.indicesPEN.push(i);
-        else if (i < 30) this.indicesDelta7.push(i); // Keep some as Delta7
-        else this.indicesPEG.push(i);
-      }
+    if (this.indicesEPG.length === 0 || this.indicesPEG.length === 0) {
+      throw new Error("[FlyNeuralNetwork] Connectome matrix corrupted: essential neurons missing.");
     }
 
     // Split P-EG into left and right hemispheres (roughly half and half)
@@ -128,7 +120,9 @@ export class FlyNeuralNetwork {
     // Calculate goal-directed phase difference if valid params are provided
     let deltaTheta = 0;
     if (currentPos && currentHeadingRad !== undefined && targetPos) {
-        const thetaGoal = Math.atan2(targetPos.x - currentPos.x, targetPos.z - currentPos.z);
+        const dx = targetPos.x - currentPos.x;
+        const dz = targetPos.z - currentPos.z;
+        const thetaGoal = Math.atan2(-dx, -dz);
         deltaTheta = Math.atan2(Math.sin(thetaGoal - currentHeadingRad), Math.cos(thetaGoal - currentHeadingRad));
     }
 
