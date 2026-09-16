@@ -113,14 +113,14 @@ export class FlyNeuralNetwork {
 
     // Inject current into Delta7 neurons
     for (const idx of this.leftDelta7) {
-        // Left input: left obstacle repulsion + right turning goal current (deltaTheta < 0)
-        let I_goal = deltaTheta < 0 ? Math.abs(deltaTheta) * 3.0 : 0.0;
+        // Left input: left obstacle repulsion + right turning goal current (deltaTheta > 0)
+        let I_goal = deltaTheta > 0 ? Math.abs(deltaTheta) * 10.0 : 0.0;
         this.delta7Input[idx] = p_l * 5.0 + I_goal;
     }
 
     for (const idx of this.rightDelta7) {
-        // Right input: right obstacle repulsion + left turning goal current (deltaTheta > 0)
-        let I_goal = deltaTheta > 0 ? deltaTheta * 3.0 : 0.0;
+        // Right input: right obstacle repulsion + left turning goal current (deltaTheta < 0)
+        let I_goal = deltaTheta < 0 ? Math.abs(deltaTheta) * 10.0 : 0.0;
         this.delta7Input[idx] = p_r * 5.0 + I_goal;
     }
 
@@ -184,6 +184,11 @@ export class FlyNeuralNetwork {
     // Default forward speed, slowed down by front obstacle
     // p_f is between 0 and 1, we map speed to 0.0 ~ 2.0 based on instruction but using base speed
     let linearVelocity = CONSTANTS.ROBOT_BASE_SPEED - (p_f * 1.5); // adjusted for 0~2.0 range roughly
+
+    if (sensors.front >= 0.8) {
+        linearVelocity = CONSTANTS.ROBOT_BASE_SPEED * Math.max(0.2, Math.cos(deltaTheta));
+    }
+
     linearVelocity = Math.max(0, linearVelocity);
     linearVelocity = Math.min(linearVelocity, 2.0);
 
