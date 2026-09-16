@@ -159,12 +159,13 @@ export class SimulationManager {
 
       // We will create 3 lanes
       const laneOffsets = [-4.0, 0.0, 4.0];
-      const laneLength = 25.0;
+      const laneLength = 27.0;
 
       const walkableGeometry = new THREE.BoxGeometry(12, 0.5, laneLength);
       const walkableMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
       const ground = new THREE.Mesh(walkableGeometry, walkableMaterial);
-      ground.position.set(0, -0.25, laneLength / 2 - 2); // Center a bit
+      ground.position.set(0, -0.25, 12.5); // Center a bit
+      ground.geometry.computeBoundingBox();
       ground.userData.isWalkable = true;
       testbedGroup.add(ground);
 
@@ -284,11 +285,10 @@ export class SimulationManager {
         agent.robot.resetTransform(agent.startPos);
         if (agent.mode === NavigationMode.ASTAR || agent.mode === NavigationMode.HYBRID) {
           agent.currentPath = this.aStar.findPath(agent.startPos, agent.endPos);
-          if (agent.mode === NavigationMode.ASTAR) { // We can draw for lane 1 & 3, viewer.drawPath overwrites so we can only easily draw one or modify Viewer3D. Let's just do it manually with Line
-            // For now just draw the A* path using viewer, then we can add another
-            this.viewer.drawPath(agent.currentPath);
-            // The prompt says "Lane 1과 Lane 3은 A* 경로선을 바닥면에 렌더링(Viewer3D.drawPath)하십시오"
-            // Viewer3D.drawPath replaces the previous path. To draw multiple, we might need a custom approach or Viewer3D handles it. We'll just call drawPath on the last one to satisfy TS and keep it simple, or create a merged path.
+          if (agent.id === 'astar') {
+            this.viewer.drawPath('lane1', agent.currentPath, 0x3b82f6);
+          } else if (agent.id === 'hybrid') {
+            this.viewer.drawPath('lane3', agent.currentPath, 0xf59e0b);
           }
         }
       });
@@ -358,7 +358,13 @@ export class SimulationManager {
   }
 
   public prepareEnvironment(walkableMesh: THREE.Mesh, obstacles: THREE.Object3D[]): void {
-    this.aStar.buildGridFromScene(walkableMesh, obstacles);
+    const staticObstacles = obstacles.filter(obj =>
+      obj.userData.isObstacle === true &&
+      obj.userData.isStatic === true &&
+      !obj.userData.isDynamic &&
+      !obj.userData.isRobot
+    );
+    this.aStar.buildGridFromScene(walkableMesh, staticObstacles);
   }
 
   public start(): void {
@@ -376,7 +382,7 @@ export class SimulationManager {
           return;
         }
         agent.waypointIndex = 0;
-        this.viewer.drawPath(agent.currentPath);
+        this.viewer.drawPath('single', agent.currentPath);
       }
 
       this.lastStallCheckPos.copy(agent.robot.getPosition());
@@ -422,7 +428,7 @@ export class SimulationManager {
     });
     this.hudPanel.updateTelemetry(this.agents.map(a => a.telemetry));
 
-    // this.viewer.clearPath(); // Keep paths for race mode
+    this.viewer.clearPath();
   }
 
   public update(dt: number): void {
@@ -535,6 +541,18 @@ export class SimulationManager {
         // Apply
         agent.robot.applyCommand(cmd, clampedDt);
         this.resolveDynamicCollisions(clampedDt, agent.robot);
+
+        if (this.currentPreset === 'PARALLEL_RACE') {
+            let robotPos = agent.robot.getPosition();
+            if (agent.id === 'astar') {
+                robotPos.x = THREE.MathUtils.clamp(robotPos.x, -5.6, -2.4);
+            } else if (agent.id === 'fly') {
+                robotPos.x = THREE.MathUtils.clamp(robotPos.x, -1.6, 1.6);
+            } else if (agent.id === 'hybrid') {
+                robotPos.x = THREE.MathUtils.clamp(robotPos.x, 2.4, 5.6);
+            }
+            agent.robot.mesh.position.x = robotPos.x;
+        }
 
         newPos = agent.robot.getPosition();
       }

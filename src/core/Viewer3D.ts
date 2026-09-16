@@ -16,7 +16,7 @@ export class Viewer3D {
   // Testbed elements tracking
   private testbedGroup: THREE.Group = new THREE.Group();
 
-  private pathLine: THREE.Line | null = null;
+  private pathLines: Map<string, THREE.Line> = new Map();
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -96,8 +96,8 @@ export class Viewer3D {
     return null;
   }
 
-  public drawPath(waypoints: THREE.Vector3[]): void {
-    this.clearPath();
+  public drawPath(pathId: string, waypoints: THREE.Vector3[], colorHex: number = 0x3b82f6): void {
+    this.clearPath(pathId);
 
     if (!waypoints || waypoints.length < 2) return;
 
@@ -106,25 +106,40 @@ export class Viewer3D {
 
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({
-      color: 0x00ffff,
+      color: colorHex,
       linewidth: 2,
       depthTest: true
     });
 
-    this.pathLine = new THREE.Line(geometry, material);
-    this.scene.add(this.pathLine);
+    const pathLine = new THREE.Line(geometry, material);
+    this.scene.add(pathLine);
+    this.pathLines.set(pathId, pathLine);
   }
 
-  public clearPath(): void {
-    if (this.pathLine) {
-      this.scene.remove(this.pathLine);
-      this.pathLine.geometry.dispose();
-      if (Array.isArray(this.pathLine.material)) {
-        this.pathLine.material.forEach(m => m.dispose());
-      } else {
-        this.pathLine.material.dispose();
+  public clearPath(pathId?: string): void {
+    if (pathId) {
+      const line = this.pathLines.get(pathId);
+      if (line) {
+        this.scene.remove(line);
+        line.geometry.dispose();
+        if (Array.isArray(line.material)) {
+          line.material.forEach(m => m.dispose());
+        } else {
+          line.material.dispose();
+        }
+        this.pathLines.delete(pathId);
       }
-      this.pathLine = null;
+    } else {
+      this.pathLines.forEach(line => {
+        this.scene.remove(line);
+        line.geometry.dispose();
+        if (Array.isArray(line.material)) {
+          line.material.forEach(m => m.dispose());
+        } else {
+          line.material.dispose();
+        }
+      });
+      this.pathLines.clear();
     }
   }
 
