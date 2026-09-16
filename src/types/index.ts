@@ -1,3 +1,6 @@
+import * as THREE from 'three';
+import { RobotController } from '../core/RobotController';
+
 export enum NavigationMode {
   ASTAR = 'ASTAR',
   FLY_CX = 'FLY_CX',
@@ -36,3 +39,43 @@ export interface TestbedConfigJSON {
 export interface RobotConfig { bodyColor?: string; cameraColor?: string; rtkAntennaColor?: string; legColor?: string; }
 export type MotionSpeedMultiplier = any;
 export type RobotMotionStatus = any;
+
+export type TestbedPreset = 'SINGLE_MAZE' | 'PARALLEL_RACE';
+
+export interface TelemetryData {
+  agentId: 'astar' | 'fly' | 'hybrid';
+  agentName: string;
+  mode: NavigationMode;
+  currentPos: { x: number; y: number; z: number };
+  headingDeg: number;
+  targetHeadingDeg: number;
+  headingErrorDeg: number;
+  linearVelocity: number;
+  angularVelocity: number;
+  closestObstacleDist: number;
+  statusText: string;
+  isEmergency: boolean;
+  // Fly Brain 전용 필드
+  membraneSpikeActive?: boolean;
+  leftPegRate?: number;
+  rightPegRate?: number;
+  // Hybrid 전용 필드
+  blendRatioAlpha?: number;
+  // AStar 전용 필드
+  remainingDist?: number;
+  isDecelerating?: boolean;
+}
+
+export interface AgentContext {
+  id: 'astar' | 'fly' | 'hybrid';
+  name: string;
+  mode: NavigationMode;
+  robot: RobotController;
+  startPos: THREE.Vector3;
+  endPos: THREE.Vector3;
+  currentPath: THREE.Vector3[];
+  waypointIndex: number;
+  state: SimState;
+  finishTime: number | null;
+  telemetry: TelemetryData;
+}

@@ -20,6 +20,7 @@ export class ControlPanel {
   // Callbacks
   public onModeChange?: (mode: NavigationMode) => void;
   public onFileSelect?: (file: File) => void;
+  public onPresetSelect?: (preset: 'SINGLE_MAZE' | 'PARALLEL_RACE') => void;
   public onSetStartToggle?: (active: boolean) => void;
   public onSetEndToggle?: (active: boolean) => void;
   public onSimStart?: () => void;
@@ -54,6 +55,8 @@ export class ControlPanel {
 
       <div class="section">
         <h2>[TESTBED LOADER]</h2>
+        <button id="btn-load-preset1">📂 [1차] 단일 미로 테스트</button>
+        <button id="btn-load-preset2">🏁 [2차] 3-레인 병렬 레이스</button>
         <button id="btn-load-testbed">📂 Load 3D / JSON File</button>
         <input type="file" id="input-file-hidden" style="display: none;" accept=".glb,.gltf,.obj,.fbx,.json">
         <span id="label-testbed-info">Status: Waiting for file...</span>
@@ -84,6 +87,18 @@ export class ControlPanel {
     this.btnLoadTestbed = document.getElementById('btn-load-testbed') as HTMLButtonElement;
     this.inputFileHidden = document.getElementById('input-file-hidden') as HTMLInputElement;
     this.labelTestbedInfo = document.getElementById('label-testbed-info') as HTMLSpanElement;
+    const btnLoadPreset1 = document.getElementById('btn-load-preset1') as HTMLButtonElement;
+    const btnLoadPreset2 = document.getElementById('btn-load-preset2') as HTMLButtonElement;
+
+    btnLoadPreset1.addEventListener('click', () => {
+      if (this.onPresetSelect) this.onPresetSelect('SINGLE_MAZE');
+      this.labelTestbedInfo.textContent = 'Current: [1차] 단일 미로';
+    });
+
+    btnLoadPreset2.addEventListener('click', () => {
+      if (this.onPresetSelect) this.onPresetSelect('PARALLEL_RACE');
+      this.labelTestbedInfo.textContent = 'Current: [2차] 3-레인 병렬 레이스';
+    });
 
     this.btnSetStart = document.getElementById('btn-set-start') as HTMLButtonElement;
     this.btnSetEnd = document.getElementById('btn-set-end') as HTMLButtonElement;
