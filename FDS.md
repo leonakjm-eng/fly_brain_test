@@ -5,7 +5,7 @@
 ## 1. 문서 메타데이터 및 버전 정보
 
 * **문서명:** Functional Design Specification (FDS) - Bio-Nav 4-Legged Simulation Sandbox
-* **버전:** `v0.3.0` #수정
+* **버전:** `v0.3.1` #수정
 * **최종 수정일:** 2026-09-16 #수정
 * **작성자 (PM):** Gemini
 * **검토자 (기획/테스트):** 사용자 (User)
@@ -58,7 +58,7 @@ bio-nav-sandbox/
     │   └── HybridNavigator.ts      # 동적 긴급도 가중치 블렌딩 제어기
     └── ui/
         ├── ControlPanel.ts        # 좌측 DOM UI 생성, 상태 바인딩, 이벤트 리스너
-        ├── HUDPanel.ts            # 우측 상단 실시간 멀티 카드 컬러 텔레메트리 뷰 #수정
+        ├── HUDPanel.ts            # 우측 상단 실시간 멀티 카드 컬러 텔레메트리 뷰
         └── styles.css             # 플로팅 UI 및 HUD 스타일
 
 ```
@@ -101,16 +101,16 @@ bio-nav-sandbox/
 |                                   |                                                   |
 | [NAVIGATION MODE]                 |               [HUD OVERLAY: 3-CARD TELEMETRY]     |
 |  (•) A* Global Planner            |               +---------+ +---------+ +---------+ |
-|  ( ) Fly CX SNN (Reactive)        |               |Lane1:A* | |Lane2:Fly| |Lane3:Hyb| | #수정
+|  ( ) Fly CX SNN (Reactive)        |               |Lane1:A* | |Lane2:Fly| |Lane3:Hyb| |
 |  ( ) Hybrid (A* + CX)             |               +---------+ +---------+ +---------+ |
 |                                   |                                                   |
 | [TESTBED LOADER]                  |                   [End Goal Line (Z=22m)]         |
-|  [📂 [1차] 단일 미로 테스트]      |                      |         |         |        | #수정
-|  [🏁 [2차] 3-레인 병렬 레이스]    |                      |         |         |        | #수정
-|  [📂 Custom 3D / JSON File]       |                 [Lane 1]  [Lane 2]  [Lane 3]      | #수정
+|  [📂 [1차] 단일 미로 테스트]      |                      |         |         |        |
+|  [🏁 [2차] 3-레인 병렬 레이스]    |                      |         |         |        |
+|  [📂 Custom 3D / JSON File]       |                 [Lane 1]  [Lane 2]  [Lane 3]      |
 |  Status: PARALLEL_RACE            |                   (A*)      (Fly)   (Hybrid)      |
 |                                   |                                                   |
-| [WAYPOINTS & CONTROL]             |                 [Robot1]  [Robot2]  [Robot3]      | #수정
+| [WAYPOINTS & CONTROL]             |                 [Robot1]  [Robot2]  [Robot3]      |
 |  [📍 Set Start]  [🎯 Set End]     |                    |         |         |          |
 |  Start: (0.0, 0.0, 0.0)           |                 [Start Line (Z=0m)]               |
 |  End:   (0.0, 0.0, 22.0)          |                                                   |
@@ -127,24 +127,24 @@ bio-nav-sandbox/
 
 | Section | Element ID | Type | 기능 명세 |
 | --- | --- | --- | --- |
-| **Mode** | `radio-mode-astar` | `<input type="radio">` | `NavigationMode.ASTAR` 선택 |
-|  | `radio-mode-cx` | `<input type="radio">` | `NavigationMode.FLY_CX` 선택 |
-|  | `radio-mode-hybrid` | `<input type="radio">` | `NavigationMode.HYBRID` 선택 (기본값) |
-| **Loader** | `btn-load-preset-1` | `<button>` | [1차] 단일 미로 환경 로드 및 초기화 #수정 |
-|  | `btn-load-preset-2` | `<button>` | [2차] 3-레인 병렬 레이스 환경 절차적 생성 및 3-에이전트 인스턴스화 #수정 |
+| **Mode** | `radio-mode-astar` | `<input type="radio">` | `NavigationMode.ASTAR` 선택 (`PARALLEL_RACE` 활성화 시 `disabled = true` 잠금) #수정 |
+|  | `radio-mode-cx` | `<input type="radio">` | `NavigationMode.FLY_CX` 선택 (`PARALLEL_RACE` 활성화 시 `disabled = true` 잠금) #수정 |
+|  | `radio-mode-hybrid` | `<input type="radio">` | `NavigationMode.HYBRID` 선택 (기본값, `PARALLEL_RACE` 활성화 시 `disabled = true` 잠금) #수정 |
+| **Loader** | `btn-load-preset-1` | `<button>` | [1차] 단일 미로 환경 로드 및 모드 라디오 버튼 잠금 해제 |
+|  | `btn-load-preset-2` | `<button>` | [2차] 3-레인 병렬 레이스 절차적 생성, 자동 `READY` 전환 및 모드 라디오 버튼 비활성화 #수정 |
 |  | `btn-load-testbed` | `<button>` | 클릭 시 hidden file input 트리거 |
 |  | `input-file-hidden` | `<input type="file">` | `.glb,.gltf,.obj,.fbx,.json` 허용 |
-|  | `label-testbed-info` | `<span>` | 로드된 파일명, 프리셋 명칭 및 메시 정보 표시 #수정 |
-| **HUD (Telemetry)** | `hud-overlay` | `<div>` | 뷰포트 우측 상단 고정 플로팅 컨테이너 #수정 |
-|  | `hud-card-astar` | `<div>` | Lane 1 (A*) 실시간 경로/거리/상태 카드 #수정 |
-|  | `hud-card-fly` | `<div>` | Lane 2 (Fly Brain) 나침반/스파이크/조향 컬러 텍스트 카드 #수정 |
-|  | `hud-card-hybrid` | `<div>` | Lane 3 (Hybrid) 동적 가중치 블렌딩(alpha)/최근접거리 카드 #수정 |
-| **Coords** | `btn-set-start` | `<button>` | 클릭 시 'Start 핀 선택 모드' 토글 (버튼 활성화 하이라이트) |
-|  | `btn-set-end` | `<button>` | 클릭 시 'End 핀 선택 모드' 토글 |
-|  | `txt-coords-info` | `<div>` | 지정된 Start/End 월드 좌표 $(X, Y, Z)$ 텍스트 출력 |
-| **Execution** | `btn-sim-start` | `<button>` | 시뮬레이션 시작 (조건 충족 시 활성화) |
-|  | `btn-sim-reset` | `<button>` | 시뮬레이션 중지 및 로봇 위치 초기화 |
-|  | `label-sim-status` | `<span>` | `IDLE`, `RUNNING`, `SUCCESS`, `COLLIDED`, `TIMEOUT` 상태 표시 |
+|  | `label-testbed-info` | `<span>` | 로드된 파일명, 프리셋 명칭 및 메시 정보 표시 |
+| **HUD (Telemetry)** | `hud-overlay` | `<div>` | 뷰포트 우측 상단 고정 플로팅 컨테이너 |
+|  | `hud-card-astar` | `<div>` | Lane 1 (A*) Blue 배지, 실시간 경로/거리/완주 랩타임 영구 표시 #수정 |
+|  | `hud-card-fly` | `<div>` | Lane 2 (Fly Brain) Cyan 배지, 42-Delta7 스파이크/발화율/완주 랩타임 영구 표시 #수정 |
+|  | `hud-card-hybrid` | `<div>` | Lane 3 (Hybrid) Amber 배지, 동적 블렌딩 가중치/완주 랩타임 영구 표시 #수정 |
+| **Coords** | `btn-set-start` | `<button>` | 클릭 시 'Start 핀 선택 모드' 토글 (`PARALLEL_RACE` 시 자동 고정 비활성화) #수정 |
+|  | `btn-set-end` | `<button>` | 클릭 시 'End 핀 선택 모드' 토글 (`PARALLEL_RACE` 시 자동 고정 비활성화) #수정 |
+|  | `txt-coords-info` | `<div>` | 지정된 Start/End 월드 좌표 $(X, Y, Z)$ 텍스트 출력 (`PARALLEL_RACE` 시 기준 좌표 자동 표기) #수정 |
+| **Execution** | `btn-sim-start` | `<button>` | 시뮬레이션 시작 (`PARALLEL_RACE` 로드 즉시 활성화) #수정 |
+|  | `btn-sim-reset` | `<button>` | 시뮬레이션 중지, 로봇 원위치 복귀 및 HUD 완주 로그 리셋 #수정 |
+|  | `label-sim-status` | `<span>` | `IDLE`, `READY`, `RUNNING`, `SUCCESS`, `COLLIDED`, `TIMEOUT` 상태 표시 |
 
 ---
 
@@ -178,7 +178,7 @@ bio-nav-sandbox/
 │      dynamicObstacles.forEach(d => d.update(dt))
 │      currentObstacles = [...staticObstacles, ...dynamicMeshes]
 │
-├─► 2. Check Goal Distance <= 0.3m ──► [TRIGGER SUCCESS]
+├─► 2. Check Goal Distance <= 0.3m ──► [TRIGGER SUCCESS & RECORD FINISH TIME] #수정
 │
 ├─► 3. Update Sensors:
 │      RobotController.castSensors(currentObstacles)
@@ -189,47 +189,54 @@ bio-nav-sandbox/
 │      │    AStarPlanner (AABB Box Intersect + 0.35m Inflation) 경로 추종
 │      │    Vector_Target = Normalize(Waypoint - CurrentPos)
 │      │
-│      ├─ Fly CX Mode:
-│      │    cx_weights.json 기반 LIF 적분 (Delta7 GABA 음수 가중치 적용)
-│      │    출력: 좌/우 P-EG 뉴런 발화 편차 기반 delta_yaw, forward_speed
+│      ├─ Fly CX Mode (42-Delta7 Pure Connectome): #수정
+│      │    - 목표 방위각: theta_goal = atan2(-dx, -dz) (Three.js -Z 전방 동기화) #수정
+│      │    - 위상차 정규화: delta_theta = atan2(sin(theta_goal - yaw), cos(theta_goal - yaw)) #수정
+│      │    - PB 좌/우 21개 Delta7 뉴런군에 감각 반발 및 목표 선회 전류 분할 주입 #수정
+│      │    - GABAergic 음수 가중치(-1.0 * W_ij) 적분 LIF 스파이크 생성 #수정
+│      │    - 좌/우 스파이크 차이 기반 각속도(angularVelocity) 및 선속도 산출 #수정
 │      │
 │      └─ Hybrid Mode:
 │           최근접 장애물 거리(d_min) 기반 긴급도 계수(alpha) 산출
-│           - d_min > 1.5m:  Vector = 0.8 * A* + 0.2 * CX
-│           - 0.7m < d_min <= 1.5m: Vector = 0.3 * A* + 0.7 * CX
-│           - d_min <= 0.7m: Vector = 1.0 * CX (A* 무시 비상 회피)
+│           - d_min > 1.5m:  Vector = 0.85 * A* + 0.15 * CX
+│           - 0.7m < d_min <= 1.5m: Vector = 0.40 * A* + 0.60 * CX
+│           - d_min <= 0.7m: Vector = 0.15 * A* + 0.85 * CX (긴급 탈출 보장)
 │
 ├─► 5. Kinematic Guard & Safety Clamp:
-│      - Proximity Guard: 동적 장애물 구체 거리 <= 0.65m 진입 시 linearVelocity = 0 및 반발 회전 인가
-│      - Safety Clamp: 전방 레이 실측 거리 < 0.35m 시 linearVelocity = 0 고정, 회전(angularVelocity)은 허용
+│      - Proximity Guard: 동적 장애물 구체 거리 <= 0.65m 진입 시 위치 강제 밀어내기(Positional Separation)
+│      - Safety Clamp: 전방 레이 실측 거리 < 0.35m 시 linearVelocity = 0 고정, 회전 허용
 │
 ├─► 6. Kinematic Transform & Animation Sync:
 │      Rotate robot towards Final_Vector (Slerp)
 │      position += forward * speed * dt
 │      gaitAnimator.update(speed, dt)
 │
-└─► 7. Path Visualization:
-       Viewer3D.drawPath(waypoints) (바닥 Y+0.02m 오프셋, Z-Fighting 방지)
+└─► 7. Telemetry & Path Visualization: #수정
+- Viewer3D.drawPath(waypoints) (바닥 Y+0.02m 오프셋)
+- HUDPanel.updateTelemetry() (완주 에이전트 상태 및 랩타임 영구 보존) #수정
 
 ```
 
-### Phase 4: 2차 3-레인 병렬 레이스 및 목표 지향 Fly Brain 회로 #수정
+### Phase 4: 2차 3-레인 병렬 레이스 및 무결성 Connectome 오케스트레이션 #수정
 
-1. **3-레인 절차적 환경 생성 (Procedural Race Generation):** #수정
-   * $X$축 기준 $4.0\text{m}$ 등간격으로 3개의 독립 레인 인스턴스화 (Lane 1: $X = -4.0\text{m}$, Lane 2: $X = 0.0\text{m}$, Lane 3: $X = +4.0\text{m}$, 레인 길이 $Z = 25.0\text{m}$). #수정
-   * 각 레인마다 동일한 상대 좌표 위치에 정적 장애물 3~4개 및 왕복 동적 장애물 1~2개를 복제 배치. #수정
-   * 프리셋 전환 시 이전 환경의 모든 지면/벽체/장애물 메시에 대해 `geometry.dispose()`, `material.dispose()`를 재귀적으로 호출하여 WebGL 메모리 완전 해제. #수정
+1. **3-레인 절차적 환경 및 즉각 준비 상태 (Instant READY State):** #수정
+   * $X$축 기준 $4.0\text{m}$ 등간격으로 3개의 독립 레인 인스턴스화 (Lane 1: $X = -4.0\text{m}$, Lane 2: $X = 0.0\text{m}$, Lane 3: $X = +4.0\text{m}$, 레인 길이 $Z = 25.0\text{m}$).
+   * 프리셋 로드 완료 즉시 `startPoint`를 $(0, 0, 0)$, `endPoint`를 $(0, 0, 22.0)$으로 자동 주입하고 `SimState.READY`로 전환하여 수동 핀 마킹 없이 [START SIMULATION] 버튼 활성화. #수정
+   * 단일 모드 라디오 버튼 3종을 비활성화(`disabled = true`)하고 모드 헤더에 `[NAVIGATION MODE: PARALLEL RACE ACTIVE]` 경고 배지 적용. #수정
 
-2. **멀티 에이전트 오케스트레이션 (`AgentContext[]`):** #수정
-   * `SimulationManager`가 3대의 독립 로봇 인스턴스를 관리하며, 동시 출발(`start()`) 명령 시 3개 에이전트가 병렬로 `SimState.RUNNING` 전환. #수정
-   * **Lane 1 (A*):** 출발선에서 도착선까지 A* 전역 경로선($Y+0.02\text{m}$)을 렌더링하고 웨이포인트를 정밀 추종. #수정
-   * **Lane 2 (Fly Brain 단독):** 경로선 없이, 목적지 좌표를 향한 목표 방위각 $\theta_{goal} = \text{atan2}(-dx, -dz)$을 계산하여 현재 헤딩과의 위상차($\Delta \theta$)를 EB-FB 조향 전류로 직접 주입. 목적지를 향해 선회 후 센서 반발 벡터와 연속 적분하여 자율 회피 주행. #수정
-   * **Lane 3 (Hybrid):** A* 경로선 렌더링 + 최근접 장애물 거리($d_{min}$) 기반 동적 가중치 블렌딩($\alpha$)으로 우회 궤적 형성. #수정
+2. **비동기 에셋 로딩 안전 격리 (Asset Loading Fail-Safe):** #수정
+   * 기본 모델 파일(`/models/default_robot.glb`) 누락 시 불필요한 네트워크 fetch 및 HTML 파싱 에러를 차단하고, `QuadrupedRobotFactory`의 절차적 4족 보행 메시를 기본 로봇 모델로 즉각 활성화. #수정
+   * `robot2`, `robot3` 생성 시 `Promise.all`로 병렬 안전 적재를 수행하며, 로봇 메시는 장애물 컨테이너가 아닌 `viewer.scene`에 직접 격리 등록. #수정
 
-3. **독립 완주 평가 및 실시간 텔레메트리 스트리밍:** #수정
-   * 각 에이전트가 도착선(Goal Line $Z \ge 22.0\text{m}$, 거리 $\le 0.3\text{m}$)에 도달 시 개별 `SimState.SUCCESS` 전환 및 완주 기록(`finishTime`)을 저장. #수정
-   * 60Hz 렌더 루프 부하를 방지하기 위해 $10\text{Hz}$($0.1\text{초}$) 주기로 `HUDPanel.updateTelemetry()`를 호출하여 우측 상단 3개 카드에 상태 갱신: #수정
-     - **Fly Brain 컬러 텍스트 규격:** Cyan(`Heading/Goal`), Yellow(`Sensor/Spike`), Green(`Steer/Speed`), Red(`Emergency Avoidance`). #수정
+3. **42-Delta7 생물학적 단일 커넥톰 SNN 구동:** #수정
+   * `cx_weights.json`의 42개 Delta7 뉴런을 원뇌교(PB) 좌반구(0~20번, 21개) 및 우반구(21~41번, 21개) 기능군으로 분할. #수정
+   * 필수 뉴런군 누락 검사 시 임의 인덱스 분배(Mock Fallback)를 전면 배제하고, 42×42 Delta7 행렬 구조가 아닐 경우 즉각 예외를 발생시키는 Fail-Fast 무결성 가드 적용. #수정
+   * Three.js 전방($-Z$) 좌표계에 맞춘 $\theta_{goal} = \text{atan2}(-dx, -dz)$ 오차 전류($I_{goal}$)와 레이캐스터 장애물 반발 전류($I_{rep}$)를 LIF 막전위 수준에서 합성하여 모터 각속도 산출. #수정
+
+4. **영구 HUD 텔레메트리 스트리밍 (Persistent Telemetry Logging):** #수정
+   * `update()` 루프 내에서 완주한 에이전트의 텔레메트리 수집을 조기 반환(`early return`)이나 건너뛰기(`continue`) 없이 지속 실행. #수정
+   * HUD 우측 상단 카드에 고유 모드 배지(A*: Blue, Fly CX: Cyan, Hybrid: Amber)를 동적 렌더링하고, 실제 Delta7 발화율(`leftDelta7Rate`, `rightDelta7Rate`) 및 스파이크 상태를 표시. #수정
+   * 완주(`SimState.SUCCESS`) 시 최종 완주 시간(`finishTime`)을 'FINISHED' 상태로 고정 유지하며, 사용자가 [RESET] 버튼을 누르기 전까지 로그가 보존됨. #수정
 
 ---
 
@@ -298,40 +305,40 @@ export interface TestbedConfigJSON {
   }>;
 }
 
-export type TestbedPreset = 'SINGLE_MAZE' | 'PARALLEL_RACE'; #수정
+export type TestbedPreset = 'SINGLE_MAZE' | 'PARALLEL_RACE';
 
-export interface TelemetryData { #수정
-  agentId: 'astar' | 'fly' | 'hybrid'; #수정
-  agentName: string; #수정
-  mode: NavigationMode; #수정
-  currentPos: { x: number; y: number; z: number }; #수정
-  headingDeg: number; #수정
-  targetHeadingDeg: number; #수정
-  headingErrorDeg: number; #수정
-  linearVelocity: number; #수정
-  angularVelocity: number; #수정
-  closestObstacleDist: number; #수정
-  statusText: string; #수정
-  isEmergency: boolean; #수정
-  membraneSpikeActive?: boolean; #수정
-  leftPegRate?: number; #수정
-  rightPegRate?: number; #수정
-  blendRatioAlpha?: number; #수정
-} #수정
+export interface TelemetryData {
+  agentId: 'astar' | 'fly' | 'hybrid';
+  agentName: string;
+  mode: NavigationMode;
+  currentPos: { x: number; y: number; z: number };
+  headingDeg: number;
+  targetHeadingDeg: number;
+  headingErrorDeg: number;
+  linearVelocity: number;
+  angularVelocity: number;
+  closestObstacleDist: number;
+  statusText: string;
+  isEmergency: boolean;
+  membraneSpikeActive?: boolean;
+  leftPegRate?: number;
+  rightPegRate?: number;
+  blendRatioAlpha?: number;
+}
 
-export interface AgentContext { #수정
-  id: 'astar' | 'fly' | 'hybrid'; #수정
-  name: string; #수정
-  mode: NavigationMode; #수정
-  robot: RobotController; #수정
-  startPos: THREE.Vector3; #수정
-  endPos: THREE.Vector3; #수정
-  currentPath: THREE.Vector3[]; #수정
-  waypointIndex: number; #수정
-  state: SimState; #수정
-  finishTime: number | null; #수정
-  telemetry: TelemetryData; #수정
-} #수정
+export interface AgentContext {
+  id: 'astar' | 'fly' | 'hybrid';
+  name: string;
+  mode: NavigationMode;
+  robot: RobotController;
+  startPos: THREE.Vector3;
+  endPos: THREE.Vector3;
+  currentPath: THREE.Vector3[];
+  waypointIndex: number;
+  state: SimState;
+  finishTime: number | null;
+  telemetry: TelemetryData;
+}
 
 ```
 
@@ -380,11 +387,16 @@ export const CONSTANTS = {
 * `resetTransform(pos: THREE.Vector3): void`
 
 
+* **`ControlPanel`**
+  * `setParallelMode(active: boolean): void` #수정
+  * `updateStatus(now: number, state: SimState, fps: number, startPos: any, endPos: any, canStart: boolean): void`
+  * `disablePlacementModes(): void`
+
 * **`FlyNeuralNetwork`**
-* `initWeights(matrixJSON?: object): void`
-* `step(sensors: RaycastSensors, dt: number, currentPos?: THREE.Vector3, currentHeadingRad?: number, targetPos?: THREE.Vector3): NavCommand` #수정
-* `computeRepulsion(sensors: RaycastSensors): THREE.Vector3`
-* `getTelemetry(): Partial<TelemetryData>` #수정
+  * `initWeights(matrixJSON?: object): void`
+  * `step(sensors: RaycastSensors, dt: number, currentPos?: THREE.Vector3, currentHeadingRad?: number, targetPos?: THREE.Vector3): NavCommand` #수정
+  * `computeRepulsion(sensors: RaycastSensors): THREE.Vector3`
+  * `getTelemetry(): { spikeActive: boolean; leftPegRate: number; rightPegRate: number; angularVelocity: number }` #수정
 
 
 * **`AStarPlanner`**
@@ -393,7 +405,7 @@ export const CONSTANTS = {
 
 
 * **`SimulationManager`**
-* `loadPreset(preset: TestbedPreset): Promise<void>` #수정
+* `loadPreset(preset: TestbedPreset): Promise<void>`
 * `setMode(mode: NavigationMode): void`
 * `setStartPoint(pos: THREE.Vector3): void`
 * `setEndPoint(pos: THREE.Vector3): void`
@@ -402,10 +414,10 @@ export const CONSTANTS = {
 * `update(dt: number): void`
 
 
-* **`HUDPanel`** #수정
-* `setMode(isParallel: boolean): void` #수정
-* `updateTelemetry(telemetries: TelemetryData[]): void` #수정
-* `clear(): void` #수정
+* **`HUDPanel`**
+* `setMode(isParallel: boolean): void`
+* `updateTelemetry(telemetries: TelemetryData[]): void`
+* `clear(): void`
 
 
 
@@ -421,7 +433,8 @@ export const CONSTANTS = {
 | **E-4** | Fly CX 전방 대칭 장애물 교착 (U자형 정면 진입) | 좌/우 레이 거리 차이가 $0.05\text{m}$ 미만이고 전방이 막힘 | 각속도 명령에 난수 노이즈(`+0.5 rad/s` 우측 편향)를 강제 주입하여 대칭 회로 락 해제. |
 | **E-5** | 백그라운드 탭 렌더링 프레임 드롭 (dt 폭증 현상) | `clock.getDelta()` 값이 $0.1\text{초}$ 초과 | `dt = Math.min(dt, 0.05)`로 강제 클램핑하여 로봇이 벽을 뚫고 지나가는 터널링 방지. |
 | **E-6** | 동적 장애물이 로봇의 측·후방 사각지대에서 돌진 | 레이캐스터 미감지 및 Bounding Sphere 거리 $\le 0.65\text{m}$ 검출 | `linearVelocity = 0` 강제 클램프 및 장애물 역방향 탈출 각속도 즉시 인가. |
-| **E-7** | neuPrint 시냅스 가중치의 전부 양수(흥분성) 표기 | `cx_weights.json` 로드 시 Presynaptic 뉴런 타입 확인 | `Delta7` 뉴런 발 연결 가중치에 $-1.0$을 곱해 GABAergic 억제성 회로 자동 구성. |
+| **E-7** | `cx_weights.json`의 단일 Delta7 뉴런 데이터셋 구조 | `numNeurons !== 42` 또는 가중치 행렬이 42x42가 아님 | 임의 Mock 인덱스 분배를 엄격히 차단하고 즉각 `Connectome matrix corrupted` 예외를 던져 무결성 보장. 정상 적재 시 좌/우 21개 반구로 분할하여 GABAergic 음수 가중치 적용. #수정 |
+| **E-8** | 기본 3D 로봇 에셋(`/models/default_robot.glb`) 파일 404 누락 | `loadRobot()` 호출 시 파일 미존재 감지 | Vite SPA의 기본 HTML 반환 파싱 에러를 방지하기 위해 네트워크 fetch를 생략하고, `QuadrupedRobotFactory`의 절차적 4족 보행 지오메트리를 기본 메시로 즉시 바인딩하여 씬 중단 방지. #수정 |
 
 ---
 
