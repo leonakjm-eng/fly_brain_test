@@ -120,6 +120,13 @@ export class SimulationManager {
     if (preset === 'SINGLE_MAZE') {
       this.hudPanel.setMode(false);
 
+      // Clean up previous robots if they exist
+      if (this.agents.length > 1) {
+        for (let i = 1; i < this.agents.length; i++) {
+          this.viewer.scene.remove(this.agents[i].robot.mesh);
+        }
+      }
+
       const testbed = TestbedGenerator.createMazeWithDynamicObstacles();
       this.dynamicObstacles = testbed.dynamicObstacles;
       this.viewer.addTestbedObject(testbed.testbedGroup);
@@ -136,12 +143,17 @@ export class SimulationManager {
         endPos: new THREE.Vector3(),
         currentPath: [],
         waypointIndex: 0,
-        state: SimState.IDLE,
+        state: SimState.READY,
         finishTime: null,
         telemetry: {} as TelemetryData
       }];
+
+      this.changeState(SimState.READY);
     } else if (preset === 'PARALLEL_RACE') {
       this.hudPanel.setMode(true);
+
+      this.startPoint = new THREE.Vector3(0, 0, 0);
+      this.endPoint = new THREE.Vector3(0, 0, 22.0);
 
       const testbedGroup = new THREE.Group();
 
@@ -216,9 +228,14 @@ export class SimulationManager {
       const robot2 = new RobotController();
       const robot3 = new RobotController();
 
-      // Add robots to testbedGroup instead of bypassing viewer['scene']
-      this.viewer.addTestbedObject(robot2.mesh);
-      this.viewer.addTestbedObject(robot3.mesh);
+      // Load robots asynchronously and add to scene
+      await Promise.all([
+        robot2.loadRobot('/models/default_robot.glb').catch(e => console.warn(e)),
+        robot3.loadRobot('/models/default_robot.glb').catch(e => console.warn(e))
+      ]);
+
+      this.viewer.scene.add(robot2.mesh);
+      this.viewer.scene.add(robot3.mesh);
 
       this.agents = [
         {
@@ -276,7 +293,7 @@ export class SimulationManager {
         }
       });
 
-      this.changeState(SimState.READY);
+      this.checkReadyState();
     }
   }
 
@@ -315,10 +332,14 @@ export class SimulationManager {
   public getEndPoint() { return this.endPoint; }
 
   public getIsReady(): boolean {
-    return this.state === SimState.READY;
+    return this.state === SimState.READY || this.currentPreset === 'PARALLEL_RACE';
   }
 
   private checkReadyState(): void {
+    if (this.currentPreset === 'PARALLEL_RACE') {
+      this.changeState(SimState.READY);
+      return;
+    }
     if (this.startPoint && this.endPoint) {
       const dist = this.startPoint.distanceTo(this.endPoint);
       if (dist >= 0.5) {
@@ -444,76 +465,79 @@ export class SimulationManager {
 
     // Run agents
     for (const agent of this.agents) {
-      if (agent.state === SimState.SUCCESS) continue;
+      const isFinished = (agent.state === SimState.SUCCESS);
 
       const currentPos = agent.robot.getPosition();
       const currentDir = agent.robot.getForwardVector();
 
       const currentHeadingRad = Math.atan2(-currentDir.x, -currentDir.z);
 
-      // Sensors
-      // Exclude self from obstacles
-      const agentObstacles = currentObstacles.filter(o => o !== agent.robot.mesh);
-      const sensors = agent.robot.castSensors(agentObstacles);
-
-      // Compute Command
       let cmd = { linearVelocity: 0, angularVelocity: 0 };
-
       let targetHeadingDeg = 0;
       let isEmergency = false;
+      let sensors = { front: 1, left: 1, right: 1 };
 
-      if (agent.mode === NavigationMode.ASTAR) {
-        let targetWp = agent.currentPath[agent.waypointIndex];
-        while (targetWp && currentPos.distanceTo(targetWp) < 0.5 && agent.waypointIndex < agent.currentPath.length - 1) {
-          agent.waypointIndex++;
-          targetWp = agent.currentPath[agent.waypointIndex];
-        }
-
-        if (!targetWp && agent.endPos) targetWp = agent.endPos;
-
-        if (targetWp) {
-          const targetDir = new THREE.Vector3().subVectors(targetWp, currentPos);
-          targetDir.y = 0;
-          if (targetDir.lengthSq() > 0) targetDir.normalize();
-
-          const crossY = currentDir.z * targetDir.x - currentDir.x * targetDir.z;
-          const dot = currentDir.x * targetDir.x + currentDir.z * targetDir.z;
-          const angleDiff = Math.atan2(crossY, dot);
-
-          targetHeadingDeg = Math.atan2(-targetDir.x, -targetDir.z) * 180 / Math.PI;
-
-          cmd.angularVelocity = THREE.MathUtils.clamp(angleDiff / clampedDt, -CONSTANTS.ROBOT_MAX_ROTATION_SPEED, CONSTANTS.ROBOT_MAX_ROTATION_SPEED);
-          cmd.linearVelocity = CONSTANTS.ROBOT_BASE_SPEED * Math.max(0, dot);
-        }
-      } else if (agent.mode === NavigationMode.FLY_CX) {
-        cmd = this.flyNet.step(sensors, clampedDt, currentPos, currentHeadingRad, agent.endPos);
-
-        const thetaGoal = Math.atan2(agent.endPos.x - currentPos.x, agent.endPos.z - currentPos.z);
-        targetHeadingDeg = (thetaGoal * 180 / Math.PI); // Not entirely matching convention but good enough
-        isEmergency = (sensors.front < 0.2); // Simple heuristic for emergency
-      } else if (agent.mode === NavigationMode.HYBRID) {
-        let targetWp = agent.currentPath[agent.waypointIndex];
-        while (targetWp && currentPos.distanceTo(targetWp) < 0.5 && agent.waypointIndex < agent.currentPath.length - 1) {
-          agent.waypointIndex++;
-          targetWp = agent.currentPath[agent.waypointIndex];
-        }
-        if (!targetWp && agent.endPos) targetWp = agent.endPos;
-
-        if (targetWp) {
-          const targetDir = new THREE.Vector3().subVectors(targetWp, currentPos);
-          targetHeadingDeg = Math.atan2(-targetDir.x, -targetDir.z) * 180 / Math.PI;
-        }
-
-        cmd = this.hybridNav.computeCommand(currentPos, currentDir, targetWp || currentPos, sensors, clampedDt);
-        isEmergency = (sensors.front < 0.2);
-      }
-
-      // Apply
-      agent.robot.applyCommand(cmd, clampedDt);
-      this.resolveDynamicCollisions(clampedDt, agent.robot);
-
-      const newPos = agent.robot.getPosition();
+      let newPos = currentPos;
       const headingDeg = currentHeadingRad * 180 / Math.PI;
+
+      if (!isFinished) {
+        // Sensors
+        // Exclude self from obstacles
+        const agentObstacles = currentObstacles.filter(o => o !== agent.robot.mesh);
+        sensors = agent.robot.castSensors(agentObstacles);
+
+        if (agent.mode === NavigationMode.ASTAR) {
+          let targetWp = agent.currentPath[agent.waypointIndex];
+          while (targetWp && currentPos.distanceTo(targetWp) < 0.5 && agent.waypointIndex < agent.currentPath.length - 1) {
+            agent.waypointIndex++;
+            targetWp = agent.currentPath[agent.waypointIndex];
+          }
+
+          if (!targetWp && agent.endPos) targetWp = agent.endPos;
+
+          if (targetWp) {
+            const targetDir = new THREE.Vector3().subVectors(targetWp, currentPos);
+            targetDir.y = 0;
+            if (targetDir.lengthSq() > 0) targetDir.normalize();
+
+            const crossY = currentDir.z * targetDir.x - currentDir.x * targetDir.z;
+            const dot = currentDir.x * targetDir.x + currentDir.z * targetDir.z;
+            const angleDiff = Math.atan2(crossY, dot);
+
+            targetHeadingDeg = Math.atan2(-targetDir.x, -targetDir.z) * 180 / Math.PI;
+
+            cmd.angularVelocity = THREE.MathUtils.clamp(angleDiff / clampedDt, -CONSTANTS.ROBOT_MAX_ROTATION_SPEED, CONSTANTS.ROBOT_MAX_ROTATION_SPEED);
+            cmd.linearVelocity = CONSTANTS.ROBOT_BASE_SPEED * Math.max(0, dot);
+          }
+        } else if (agent.mode === NavigationMode.FLY_CX) {
+          cmd = this.flyNet.step(sensors, clampedDt, currentPos, currentHeadingRad, agent.endPos);
+
+          const thetaGoal = Math.atan2(-(agent.endPos.x - currentPos.x), -(agent.endPos.z - currentPos.z));
+          targetHeadingDeg = (thetaGoal * 180 / Math.PI); // Not entirely matching convention but good enough
+          isEmergency = (sensors.front < 0.2); // Simple heuristic for emergency
+        } else if (agent.mode === NavigationMode.HYBRID) {
+          let targetWp = agent.currentPath[agent.waypointIndex];
+          while (targetWp && currentPos.distanceTo(targetWp) < 0.5 && agent.waypointIndex < agent.currentPath.length - 1) {
+            agent.waypointIndex++;
+            targetWp = agent.currentPath[agent.waypointIndex];
+          }
+          if (!targetWp && agent.endPos) targetWp = agent.endPos;
+
+          if (targetWp) {
+            const targetDir = new THREE.Vector3().subVectors(targetWp, currentPos);
+            targetHeadingDeg = Math.atan2(-targetDir.x, -targetDir.z) * 180 / Math.PI;
+          }
+
+          cmd = this.hybridNav.computeCommand(currentPos, currentDir, targetWp || currentPos, sensors, clampedDt);
+          isEmergency = (sensors.front < 0.2);
+        }
+
+        // Apply
+        agent.robot.applyCommand(cmd, clampedDt);
+        this.resolveDynamicCollisions(clampedDt, agent.robot);
+
+        newPos = agent.robot.getPosition();
+      }
 
       let headingErrorDeg = targetHeadingDeg - headingDeg;
       // normalize to -180..180
@@ -542,14 +566,15 @@ export class SimulationManager {
         linearVelocity: cmd.linearVelocity,
         angularVelocity: cmd.angularVelocity,
         closestObstacleDist: Math.min(sensors.front, sensors.left, sensors.right) * CONSTANTS.RAY_MAX_RANGE,
-        statusText: agent.state === SimState.RUNNING ? 'Moving' : 'Stopped',
+        statusText: agent.state === SimState.SUCCESS ? 'Finished' : (agent.state === SimState.RUNNING ? 'Moving' : 'Stopped'),
         isEmergency,
         membraneSpikeActive: flyTelemetry.spikeActive,
         leftPegRate: flyTelemetry.leftPegRate,
         rightPegRate: flyTelemetry.rightPegRate,
         blendRatioAlpha: hybridNavState, // Need to hook hybrid alpha if required, prompt mentioned HUDPanel uses it. We just pass 0 if not accessible.
         remainingDist,
-        isDecelerating
+        isDecelerating,
+        finishTime: agent.finishTime || undefined
       };
 
       // Check conditions
