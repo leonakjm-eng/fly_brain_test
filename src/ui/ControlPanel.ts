@@ -169,10 +169,15 @@ export class ControlPanel {
 
   public setParallelMode(active: boolean): void {
     if (active) {
+      this.disablePlacementModes();
       this.modeRadios.forEach(radio => radio.disabled = true);
+      this.btnSetStart.disabled = true;
+      this.btnSetEnd.disabled = true;
       this.navModeHeader.textContent = '[NAVIGATION MODE: PARALLEL RACE ACTIVE]';
     } else {
       this.modeRadios.forEach(radio => radio.disabled = false);
+      this.btnSetStart.disabled = false;
+      this.btnSetEnd.disabled = false;
       this.navModeHeader.textContent = '[NAVIGATION MODE]';
     }
   }
