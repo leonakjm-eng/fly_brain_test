@@ -191,19 +191,19 @@ export class SimulationManager {
       ground.userData.isWalkable = true;
       testbedGroup.add(ground);
 
-      // Define a single template for static and dynamic obstacles relative to X = 0
+      // Define templates for static and dynamic obstacles relative to X = 0
       const obstacleTemplate = {
         statics: [
           { x: -0.5, y: 0.5, z: 5 },
           { x: 0.5, y: 0.5, z: 11 },
           { x: -0.2, y: 0.5, z: 17 }
-        ],
-        dynamic: {
-          xStart: -1.0,
-          xEnd: 1.0,
-          z: 14
-        }
+        ]
       };
+
+      const dynamicTemplates = [
+        { z: 7.0, xStart: -1.4, xEnd: 1.4, period: 3.3, phaseOffset: 0 },
+        { z: 15.0, xStart: -1.2, xEnd: 1.2, period: 4.8, phaseOffset: Math.PI / 2 }
+      ];
 
       // Add walls and obstacles for each lane
       laneOffsets.forEach(xOffset => {
@@ -231,27 +231,29 @@ export class SimulationManager {
             testbedGroup.add(obs);
         });
 
-        // Dynamic obstacle from template
-        const dynG = new THREE.CylinderGeometry(0.3, 0.3, 1, 16);
-        const dynM = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-        const dynMsh = new THREE.Mesh(dynG, dynM);
-        dynMsh.position.set(xOffset, 0.5, obstacleTemplate.dynamic.z);
-        dynMsh.userData.isDynamic = true;
-        dynMsh.userData.isObstacle = true;
-        testbedGroup.add(dynMsh);
+        // Dynamic obstacles from templates
+        dynamicTemplates.forEach(dyn => {
+            const dynG = new THREE.CylinderGeometry(0.35, 0.35, 1.2, 16);
+            const dynM = new THREE.MeshStandardMaterial({ color: 0xef4444 });
+            const dynMsh = new THREE.Mesh(dynG, dynM);
+            dynMsh.position.set(xOffset, 0.5, dyn.z);
+            dynMsh.userData.isDynamic = true;
+            dynMsh.userData.isObstacle = true;
+            testbedGroup.add(dynMsh);
 
-        // Push dynamic obstacle controller
-        this.dynamicObstacles.push({
-          mesh: dynMsh,
-          startPos: new THREE.Vector3(xOffset + obstacleTemplate.dynamic.xStart, 0.5, obstacleTemplate.dynamic.z),
-          endPos: new THREE.Vector3(xOffset + obstacleTemplate.dynamic.xEnd, 0.5, obstacleTemplate.dynamic.z),
-          period: 2.5,
-          elapsedTime: 0,
-          update(dt: number) {
-            this.elapsedTime += dt;
-            const phase = (Math.sin((this.elapsedTime / this.period) * Math.PI * 2 - Math.PI / 2) + 1) / 2;
-            this.mesh.position.lerpVectors(this.startPos, this.endPos, phase);
-          }
+            // Push dynamic obstacle controller
+            this.dynamicObstacles.push({
+              mesh: dynMsh,
+              startPos: new THREE.Vector3(xOffset + dyn.xStart, 0.5, dyn.z),
+              endPos: new THREE.Vector3(xOffset + dyn.xEnd, 0.5, dyn.z),
+              period: dyn.period,
+              elapsedTime: 0,
+              update(dt: number) {
+                this.elapsedTime += dt;
+                const phase = (Math.sin((this.elapsedTime / this.period) * Math.PI * 2 - Math.PI / 2 + dyn.phaseOffset) + 1) / 2;
+                this.mesh.position.lerpVectors(this.startPos, this.endPos, phase);
+              }
+            });
         });
       });
 
