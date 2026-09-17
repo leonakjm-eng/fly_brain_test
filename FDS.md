@@ -5,7 +5,7 @@
 ## 1. 문서 메타데이터 및 버전 정보
 
 * **문서명:** Functional Design Specification (FDS) - Bio-Nav 4-Legged Simulation Sandbox
-* **버전:** `v0.3.3` #수정
+* **버전:** `v0.3.4` #수정
 * **최종 수정일:** 2026-09-17 #수정
 * **작성자 (PM):** Gemini
 * **검토자 (기획/테스트):** 사용자 (User)
@@ -202,11 +202,11 @@ bio-nav-sandbox/
 │            omega_final = (1 - alpha) * omega_AStar + alpha * omega_CX
 │            - d_min > 1.8m (개활지): alpha = 0.15 (A* 85% 지배적 전역 추종)
 │            - 0.8m < d_min <= 1.8m (접근 경고): alpha = 0.50 (50:50 점진적 우회 기동)
-│            - d_min <= 0.8m (긴급 구간): alpha = 0.85 (SNN 85% 긴급 회피 선회, linearVelocity = v_base * 0.4 감속) #수정
+│            - d_min <= 0.8m (긴급 구간): alpha = 0.85 (SNN 85% 긴급 회피 선회, linearVelocity = v_base * 0.4 감속)
 │
 ├─► 5. Kinematic Guard & Safety Clamp:
 │      - Proximity Guard: 동적 장애물 구체 거리 <= 0.65m 진입 시 위치 강제 밀어내기(Positional Separation)
-│      - Hard Boundary Clamp: 로봇 중심 X좌표를 확장된 소속 레인 폭(±2.2m) 내부로 강제 제한하여 벽면 관통 방지 #수정
+│      - Hard Boundary Clamp: 로봇 중심 X좌표를 확장된 소속 레인 폭(±2.2m) 내부로 강제 제한하여 벽면 관통 방지
 │      - Safety Clamp: 전방 레이 실측 거리 < 0.35m 시 linearVelocity = 0 고정, 회전 허용
 │
 ├─► 6. Kinematic Transform & Animation Sync:
@@ -223,11 +223,11 @@ bio-nav-sandbox/
 ### Phase 4: 2차 3-레인 병렬 레이스 및 무결성 Connectome 오케스트레이션
 
 1. **3-레인 기하 확장 및 동적 장애물 복제 (Expanded Race Track & Replicator):**
-   * $X$축 기준 $5.0\text{m}$ 등간격으로 3개의 독립 레인 인스턴스화 (Lane 1: $X = -5.0\text{m}$, Lane 2: $X = 0.0\text{m}$, Lane 3: $X = +5.0\text{m}$, 레인 길이 $Z = 25.0\text{m}$, 바닥 총 폭 $18.0\text{m}$). #수정
-   * 시작선($Z \le 0.6\text{m}$) 및 도착선($Z \ge 21.4\text{m}$) 구간에 Safe Zone을 적용하여 인플레이션 차단을 원천 방지하고, 시작/도착 노드가 차단되었을 때 최근접 이동 가능 노드로 스냅하는 방어 로직 내장. #수정
-   * 기준 레인(로컬 $X=0$)에 2개의 왕복 동적 장애물 템플릿($Z=7.0\text{m}$ 주기 3.3초, $Z=15.0\text{m}$ 주기 4.8초)을 정의하고, 3개 레인에 동일 복제하여 총 6개의 동적 장애물(Cylinder, 0xef4444)을 배치. #수정
-   * 프리셋 로드 시 `cleanupAgents()`를 선행 실행하여 기존 로봇 3D 메시를 씬에서 완전 제거(`scene.remove`) 및 메모리 해제(`dispose`)함으로써 다중 중복 인스턴스 생성을 원천 차단. #수정
-   * 프리셋 로드 완료 즉시 레인별 Start/End 좌표 자동 주입 후 `SimState.READY`로 전환, UI 버튼 잠금(`disabled = true`) 적용. #수정
+   * $X$축 기준 $5.0\text{m}$ 등간격으로 3개의 독립 레인 인스턴스화 (Lane 1: $X = -5.0\text{m}$, Lane 2: $X = 0.0\text{m}$, Lane 3: $X = +5.0\text{m}$, 레인 길이 $Z = 25.0\text{m}$, 바닥 총 폭 $18.0\text{m}$).
+   * 시작선($Z \le 0.6\text{m}$) 및 도착선($Z \ge 21.4\text{m}$) 구간에 Safe Zone을 적용하여 인플레이션 차단을 원천 방지하고, 시작/도착 노드가 차단되었을 때 최근접 이동 가능 노드로 스냅하는 방어 로직 내장.
+   * 기준 레인(로컬 $X=0$)에 2개의 왕복 동적 장애물 템플릿($Z=7.0\text{m}$ 주기 3.3초, $Z=15.0\text{m}$ 주기 4.8초)을 정의하고, 3개 레인에 동일 복제하여 총 6개의 동적 장애물(Cylinder, 0xef4444)을 배치.
+   * 프리셋 로드 시 `cleanupAgents()`를 선행 실행하여 기존 로봇 3D 메시를 씬에서 완전 제거(`scene.remove`) 및 메모리 해제(`dispose`)함으로써 다중 중복 인스턴스 생성을 원천 차단.
+   * 프리셋 로드 완료 즉시 레인별 Start/End 좌표 자동 주입 후 `SimState.READY`로 전환, UI 버튼 잠금(`disabled = true`) 적용.
 
 2. **계획(Plan-time)과 주행(Run-time) 장애물 2-Tier 격리:**
    * **계획 단계:** `SimulationManager.prepareEnvironment()` 진입 시 씬 계층을 재귀 순회(`traverse`)하여 실제 렌더링 메시 단위로 평탄화 수집. `!isDynamic && !isRobot` 네거티브 필터를 적용하여 움직이는 객체(동적 원통/박스, 로봇)는 완전히 무시하고 정적 지형/벽체만 `AStarPlanner`에 전달.
@@ -239,7 +239,8 @@ bio-nav-sandbox/
 
 4. **42-Delta7 생물학적 단일 커넥톰 SNN 구동:**
    * `cx_weights.json`의 42개 Delta7 뉴런을 원뇌교(PB) 좌반구(0~20번, 21개) 및 우반구(21~41번, 21개) 기능군으로 분할.
-   * 42×42 행렬 무결성 Fail-Fast 가드 유지, Three.js 전방($-Z$) 좌표계에 맞춘 $\theta_{goal}$ 오차 전류($I_{goal}$, 게인 $\approx 10.0$)와 센서 반발 전류($I_{rep}$)를 LIF 막전위 수준에서 합성하여 모터 각속도 산출.
+   * 42×42 행렬 무결성 검증 시 0으로 채우는 Mocking 폴백을 완전 배제하고, 단 하나의 행/열 또는 요소라도 결손 시 즉시 에러(`Connectome matrix corrupted: Expected 42x42 numeric matrix`)를 발생시키는 엄격한 Fail-Fast 체계 확립. #수정
+   * Three.js 전방($-Z$) 좌표계에 맞춘 $\theta_{goal}$ 오차 전류($I_{goal}$, 게인 $\approx 10.0$)와 센서 반발 전류($I_{rep}$)를 LIF 막전위 수준에서 합성하여 모터 각속도 산출.
    * 전방 센서 감지 거리 $\ge 0.8$ 개활지 진입 시 순항 속도 공식($v_{base} \times \max(0.2, \cos(\Delta\theta))$)을 인가하여 도착선($Z=22\text{m}$) 직진 주행 보장.
 
 5. **영구 HUD 텔레메트리 스트리밍 및 래치:**
@@ -440,11 +441,11 @@ export const CONSTANTS = {
 | **E-4** | Fly CX 전방 대칭 장애물 교착 (U자형 정면 진입) | 좌/우 레이 거리 차이가 $0.05\text{m}$ 미만이고 전방이 막힘 | 각속도 명령에 난수 노이즈(`+0.5 rad/s` 우측 편향)를 강제 주입하여 대칭 회로 락 해제. |
 | **E-5** | 백그라운드 탭 렌더링 프레임 드롭 (dt 폭증 현상) | `clock.getDelta()` 값이 $0.1\text{초}$ 초과 | `dt = Math.min(dt, 0.05)`로 강제 클램핑하여 로봇이 벽을 뚫고 지나가는 터널링 방지. |
 | **E-6** | 동적 장애물이 로봇의 측·후방 사각지대에서 돌진 | 레이캐스터 미감지 및 Bounding Sphere 거리 $\le 0.65\text{m}$ 검출 | `linearVelocity = 0` 강제 클램프 및 장애물 역방향 탈출 각속도 즉시 인가. |
-| **E-7** | `cx_weights.json`의 단일 Delta7 뉴런 데이터셋 구조 | `numNeurons !== 42` 또는 가중치 행렬이 42x42가 아님 | 임의 Mock 인덱스 분배를 엄격히 차단하고 즉각 `Connectome matrix corrupted` 예외를 던져 무결성 보장. 정상 적재 시 좌/우 21개 반구로 분할하여 GABAergic 음수 가중치 적용. |
+| **E-7** | `cx_weights.json`의 단일 Delta7 뉴런 데이터셋 구조 | `numNeurons !== 42` 또는 가중치 행렬이 42x42가 아니거나 비수치 데이터 포함 | 가중치 누락 시 0으로 채우는(0-fill) Mocking 안티패턴을 원천 금지하고, 규격 불일치 감지 즉시 `Connectome matrix corrupted: Expected 42x42 numeric matrix` 예외를 발생시켜 시스템 중단. 정상 검증 통과 시에만 좌/우 21개 반구로 분할하여 GABAergic 음수 가중치 적용. #수정 |
 | **E-8** | 기본 3D 로봇 에셋(`/models/default_robot.glb`) 파일 404 누락 | `loadRobot()` 호출 시 파일 미존재 감지 | Vite SPA의 기본 HTML 반환 파싱 에러를 방지하기 위해 네트워크 fetch를 생략하고, `QuadrupedRobotFactory`의 절차적 4족 보행 지오메트리를 기본 메시로 즉시 바인딩하여 씬 중단 방지. |
 | **E-9** | 최상위 컨테이너(Group)와 하위 렌더링 메시(Mesh) 계층 불일치로 정적 벽체 누락 | 최상위 노드에 `userData` 플래그 미부여 | `prepareEnvironment()`에서 `traverse`로 렌더링 메시를 전수 평탄화 수집하고, `!isDynamic && !isRobot` 네거티브 필터를 적용하여 정적 벽체가 A* 그리드에서 탈락하는 현상을 원천 방지. |
 | **E-10** | 2차 병렬 레이스 절차적 생성 시 레인 간 장애물 위치 불일치 | 레인 생성 시 `Math.random()` 개별 호출 | 단일 장애물 템플릿 배열을 사전에 정의하고 $X$ 오프셋만 가산하여 복제함으로써 3개 레인에 100% 동일한 장애물 형상 및 좌표를 확정 주입. |
-| **E-11** | 하이브리드 주행 시 전방 A* 벡터와 SNN 회피 벡터의 상쇄로 인한 스톨 현상 | $d_{min} \le 0.8\text{m}$ 구간에서 3D 벡터 합산 시 선회 토크 소실 검출 | 단순 벡터 합산을 폐기하고 A* 목표 각속도와 SNN 스파이크 차동 각속도를 가중치 $\alpha$로 직접 보간(Direct Steering Blending)하며, 전진 속도를 감속 클램프하여 유기적 회피 기동 보장. #수정 |
+| **E-11** | 하이브리드 주행 시 전방 A* 벡터와 SNN 회피 벡터의 상쇄로 인한 스톨 현상 | $d_{min} \le 0.8\text{m}$ 구간에서 3D 벡터 합산 시 선회 토크 소실 검출 | 단순 벡터 합산을 폐기하고 A* 목표 각속도와 SNN 스파이크 차동 각속도를 가중치 $\alpha$로 직접 보간(Direct Steering Blending)하며, 전진 속도를 감속 클램프하여 유기적 회피 기동 보장. |
 
 ---
 
