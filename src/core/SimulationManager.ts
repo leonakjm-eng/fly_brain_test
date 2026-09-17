@@ -169,6 +169,20 @@ export class SimulationManager {
       ground.userData.isWalkable = true;
       testbedGroup.add(ground);
 
+      // Define a single template for static and dynamic obstacles relative to X = 0
+      const obstacleTemplate = {
+        statics: [
+          { x: -0.5, y: 0.5, z: 5 },
+          { x: 0.5, y: 0.5, z: 11 },
+          { x: -0.2, y: 0.5, z: 17 }
+        ],
+        dynamic: {
+          xStart: -1.0,
+          xEnd: 1.0,
+          z: 14
+        }
+      };
+
       // Add walls and obstacles for each lane
       laneOffsets.forEach(xOffset => {
         // Walls
@@ -184,22 +198,22 @@ export class SimulationManager {
         rightWall.position.set(xOffset + 1.8, 1, laneLength / 2 - 2);
         testbedGroup.add(rightWall);
 
-        // Static Obstacles
-        for (let i=0; i<3; i++) {
+        // Static Obstacles from template
+        obstacleTemplate.statics.forEach(pos => {
             const obsG = new THREE.BoxGeometry(1, 1, 1);
             const obsM = new THREE.MeshStandardMaterial({ color: 0xff8800 });
             const obs = new THREE.Mesh(obsG, obsM);
-            obs.position.set(xOffset + (Math.random() - 0.5) * 1.5, 0.5, 5 + i * 6);
+            obs.position.set(xOffset + pos.x, pos.y, pos.z);
             obs.userData.isStatic = true;
             obs.userData.isObstacle = true;
             testbedGroup.add(obs);
-        }
+        });
 
-        // Dynamic obstacle
+        // Dynamic obstacle from template
         const dynG = new THREE.CylinderGeometry(0.3, 0.3, 1, 16);
         const dynM = new THREE.MeshStandardMaterial({ color: 0xff0000 });
         const dynMsh = new THREE.Mesh(dynG, dynM);
-        dynMsh.position.set(xOffset, 0.5, 12);
+        dynMsh.position.set(xOffset, 0.5, obstacleTemplate.dynamic.z);
         dynMsh.userData.isDynamic = true;
         dynMsh.userData.isObstacle = true;
         testbedGroup.add(dynMsh);
@@ -207,8 +221,8 @@ export class SimulationManager {
         // Push dynamic obstacle controller
         this.dynamicObstacles.push({
           mesh: dynMsh,
-          startPos: new THREE.Vector3(xOffset - 1, 0.5, 12),
-          endPos: new THREE.Vector3(xOffset + 1, 0.5, 12),
+          startPos: new THREE.Vector3(xOffset + obstacleTemplate.dynamic.xStart, 0.5, obstacleTemplate.dynamic.z),
+          endPos: new THREE.Vector3(xOffset + obstacleTemplate.dynamic.xEnd, 0.5, obstacleTemplate.dynamic.z),
           period: 2.5,
           elapsedTime: 0,
           update(dt: number) {
@@ -398,6 +412,23 @@ export class SimulationManager {
       }
 
       this.lastStallCheckPos.copy(agent.robot.getPosition());
+    } else if (this.currentPreset === 'PARALLEL_RACE') {
+      const agent1 = this.agents.find(a => a.id === 'astar');
+      const agent3 = this.agents.find(a => a.id === 'hybrid');
+
+      if (agent1) {
+        const astarPath = this.aStar.findPath(agent1.startPos, agent1.endPos);
+        agent1.currentPath = astarPath;
+        agent1.waypointIndex = 0;
+        this.viewer.drawPath('lane1', astarPath, 0x3b82f6); // Blue
+      }
+
+      if (agent3) {
+        const hybridPath = this.aStar.findPath(agent3.startPos, agent3.endPos);
+        agent3.currentPath = hybridPath;
+        agent3.waypointIndex = 0;
+        this.viewer.drawPath('lane3', hybridPath, 0xf59e0b); // Amber
+      }
     }
 
     this.simulationTime = 0;
