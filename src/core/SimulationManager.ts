@@ -20,6 +20,7 @@ export class SimulationManager {
   private hudPanel: HUDPanel;
 
   // Algorithms
+  private primaryRobot: RobotController;
   private aStar: AStarPlanner;
   private flyNet: FlyNeuralNetwork;
   private hybridNav: HybridNavigator;
@@ -75,6 +76,7 @@ export class SimulationManager {
 
   constructor(viewer: Viewer3D, robot: RobotController) {
     this.viewer = viewer;
+    this.primaryRobot = robot;
 
     this.aStar = new AStarPlanner();
     this.flyNet = new FlyNeuralNetwork();
@@ -104,7 +106,31 @@ export class SimulationManager {
     });
   }
 
+    private cleanupAgents(): void {
+    this.agents.forEach(agent => {
+      this.viewer.scene.remove(agent.robot.mesh);
+      if (typeof (agent.robot as any).dispose === 'function') {
+        (agent.robot as any).dispose();
+      } else {
+        agent.robot.mesh.traverse((child: any) => {
+          if (child.isMesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) child.material.forEach((m: any) => m.dispose());
+              else child.material.dispose();
+            }
+          }
+        });
+        if ((agent.robot as any).mixer) {
+            (agent.robot as any).mixer.stopAllAction();
+        }
+      }
+    });
+    this.agents = [];
+  }
+
   public async loadPreset(preset: TestbedPreset): Promise<void> {
+    this.cleanupAgents();
     this.currentPreset = preset;
     this.changeState(SimState.IDLE);
 
@@ -120,12 +146,7 @@ export class SimulationManager {
     if (preset === 'SINGLE_MAZE') {
       this.hudPanel.setMode(false);
 
-      // Clean up previous robots if they exist
-      if (this.agents.length > 1) {
-        for (let i = 1; i < this.agents.length; i++) {
-          this.viewer.scene.remove(this.agents[i].robot.mesh);
-        }
-      }
+
 
       const testbed = TestbedGenerator.createMazeWithDynamicObstacles();
       this.dynamicObstacles = testbed.dynamicObstacles;
@@ -133,7 +154,8 @@ export class SimulationManager {
       this.prepareEnvironment(testbed.walkableGround, this.viewer.getTestbedObjects());
 
       // Ensure 1 agent
-      const primaryRobot = this.agents[0].robot;
+      const primaryRobot = this.primaryRobot;
+      this.viewer.scene.add(primaryRobot.mesh);
       this.agents = [{
         id: 'hybrid',
         name: 'Single Robot',
@@ -158,10 +180,10 @@ export class SimulationManager {
       const testbedGroup = new THREE.Group();
 
       // We will create 3 lanes
-      const laneOffsets = [-4.0, 0.0, 4.0];
+      const laneOffsets = [-5.0, 0.0, 5.0];
       const laneLength = 27.0;
 
-      const walkableGeometry = new THREE.BoxGeometry(12, 0.5, laneLength);
+      const walkableGeometry = new THREE.BoxGeometry(20, 0.5, laneLength);
       const walkableMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
       const ground = new THREE.Mesh(walkableGeometry, walkableMaterial);
       ground.position.set(0, -0.25, 12.5); // Center a bit
@@ -189,13 +211,13 @@ export class SimulationManager {
         const leftWallGeometry = new THREE.BoxGeometry(0.2, 2, laneLength);
         const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
         const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial);
-        leftWall.position.set(xOffset - 1.8, 1, laneLength / 2 - 2);
+        leftWall.position.set(xOffset - 2.5, 1, laneLength / 2 - 2);
         leftWall.userData.isStatic = true;
         leftWall.userData.isObstacle = true;
         testbedGroup.add(leftWall);
 
         const rightWall = leftWall.clone();
-        rightWall.position.set(xOffset + 1.8, 1, laneLength / 2 - 2);
+        rightWall.position.set(xOffset + 2.5, 1, laneLength / 2 - 2);
         testbedGroup.add(rightWall);
 
         // Static Obstacles from template
@@ -237,7 +259,8 @@ export class SimulationManager {
       this.prepareEnvironment(ground, this.viewer.getTestbedObjects());
 
       // Setup 3 agents
-      const primaryRobot = this.agents[0].robot;
+      const primaryRobot = this.primaryRobot;
+      this.viewer.scene.add(primaryRobot.mesh);
 
       // We need 2 more robots
       const robot2 = new RobotController();
@@ -258,8 +281,8 @@ export class SimulationManager {
           name: 'A* Planner',
           mode: NavigationMode.ASTAR,
           robot: primaryRobot,
-          startPos: new THREE.Vector3(-4.0, 0, 0),
-          endPos: new THREE.Vector3(-4.0, 0, 22.0),
+          startPos: new THREE.Vector3(-5.0, 0, 0),
+          endPos: new THREE.Vector3(-5.0, 0, 22.0),
           currentPath: [],
           waypointIndex: 0,
           state: SimState.READY,
@@ -284,8 +307,8 @@ export class SimulationManager {
           name: 'Hybrid Nav',
           mode: NavigationMode.HYBRID,
           robot: robot3,
-          startPos: new THREE.Vector3(4.0, 0, 0),
-          endPos: new THREE.Vector3(4.0, 0, 22.0),
+          startPos: new THREE.Vector3(5.0, 0, 0),
+          endPos: new THREE.Vector3(5.0, 0, 22.0),
           currentPath: [],
           waypointIndex: 0,
           state: SimState.READY,
@@ -391,6 +414,18 @@ export class SimulationManager {
     });
 
     this.aStar.buildGridFromScene(walkableMesh, staticObstacleMeshes);
+
+    // Initial path test mapping for validation visualization logging
+    this.agents.forEach(agent => {
+        if (agent.mode === NavigationMode.ASTAR || agent.mode === NavigationMode.HYBRID) {
+            if (agent.startPos && agent.endPos) {
+                const path = this.aStar.findPath(agent.startPos, agent.endPos);
+                if (path.length === 0) {
+                    console.error(`[Navigation] Path generation failed for agent: ${agent.id}`);
+                }
+            }
+        }
+    });
   }
 
   public start(): void {
@@ -542,7 +577,7 @@ export class SimulationManager {
             targetWp = agent.currentPath[agent.waypointIndex];
           }
 
-          if (!targetWp && agent.endPos) targetWp = agent.endPos;
+          if (!targetWp && agent.currentPath.length > 0 && agent.endPos) targetWp = agent.endPos;
 
           if (targetWp) {
             const targetDir = new THREE.Vector3().subVectors(targetWp, currentPos);
@@ -570,7 +605,7 @@ export class SimulationManager {
             agent.waypointIndex++;
             targetWp = agent.currentPath[agent.waypointIndex];
           }
-          if (!targetWp && agent.endPos) targetWp = agent.endPos;
+          if (!targetWp && agent.currentPath.length > 0 && agent.endPos) targetWp = agent.endPos;
 
           if (targetWp) {
             const targetDir = new THREE.Vector3().subVectors(targetWp, currentPos);
@@ -581,6 +616,12 @@ export class SimulationManager {
           isEmergency = (sensors.front < 0.2);
         }
 
+                if ((agent.mode === NavigationMode.ASTAR || agent.mode === NavigationMode.HYBRID) && agent.currentPath.length === 0) {
+            cmd.linearVelocity = 0;
+            cmd.angularVelocity = 0;
+            targetHeadingDeg = headingDeg; // Keep current heading
+        }
+
         // Apply
         agent.robot.applyCommand(cmd, clampedDt);
         this.resolveDynamicCollisions(clampedDt, agent.robot);
@@ -588,11 +629,11 @@ export class SimulationManager {
         if (this.currentPreset === 'PARALLEL_RACE') {
             let robotPos = agent.robot.getPosition();
             if (agent.id === 'astar') {
-                robotPos.x = THREE.MathUtils.clamp(robotPos.x, -5.6, -2.4);
+                robotPos.x = THREE.MathUtils.clamp(robotPos.x, -7.2, -2.8);
             } else if (agent.id === 'fly') {
-                robotPos.x = THREE.MathUtils.clamp(robotPos.x, -1.6, 1.6);
+                robotPos.x = THREE.MathUtils.clamp(robotPos.x, -2.2, 2.2);
             } else if (agent.id === 'hybrid') {
-                robotPos.x = THREE.MathUtils.clamp(robotPos.x, 2.4, 5.6);
+                robotPos.x = THREE.MathUtils.clamp(robotPos.x, 2.8, 7.2);
             }
             agent.robot.mesh.position.x = robotPos.x;
         }
@@ -627,7 +668,9 @@ export class SimulationManager {
         linearVelocity: cmd.linearVelocity,
         angularVelocity: cmd.angularVelocity,
         closestObstacleDist: Math.min(sensors.front, sensors.left, sensors.right) * CONSTANTS.RAY_MAX_RANGE,
-        statusText: agent.state === SimState.SUCCESS ? 'Finished' : (agent.state === SimState.RUNNING ? 'Moving' : 'Stopped'),
+        statusText: agent.state === SimState.SUCCESS ? 'Finished' :
+            ((agent.mode === NavigationMode.ASTAR || agent.mode === NavigationMode.HYBRID) && agent.currentPath.length === 0) ? 'PATH_FAILED' :
+            (agent.state === SimState.RUNNING ? 'Moving' : 'Stopped'),
         isEmergency,
         membraneSpikeActive: flyTelemetry.spikeActive,
         leftPegRate: flyTelemetry.leftPegRate,
