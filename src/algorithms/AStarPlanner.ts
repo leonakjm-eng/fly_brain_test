@@ -117,7 +117,12 @@ export class AStarPlanner {
                   const dist = Math.hypot(neighbor.worldX - closestX, neighbor.worldZ - closestZ);
 
                   if (dist <= ROBOT_RADIUS) {
-                    nodesToInflate.push(neighbor);
+                    // Safe zone logic
+                    if (neighbor.worldZ <= 0.6 || neighbor.worldZ >= 21.4) {
+                      // Do not inflate Safe Zone nodes
+                    } else {
+                      nodesToInflate.push(neighbor);
+                    }
                   }
                 }
               }
@@ -169,9 +174,47 @@ export class AStarPlanner {
     return 14 * dstX + 10 * (dstZ - dstX);
   }
 
+    private findNearestWalkableNode(node: GridNode): GridNode | null {
+    if (node.walkable) return node;
+
+    let nearest: GridNode | null = null;
+    let minDistance = Infinity;
+
+    // Search 5x5 area (radius 2)
+    for (let xOffset = -2; xOffset <= 2; xOffset++) {
+      for (let zOffset = -2; zOffset <= 2; zOffset++) {
+        if (xOffset === 0 && zOffset === 0) continue;
+
+        const checkX = node.x + xOffset;
+        const checkZ = node.z + zOffset;
+
+        if (checkX >= 0 && checkX < this.gridWidth && checkZ >= 0 && checkZ < this.gridDepth) {
+          const neighbor = this.grid[checkX][checkZ];
+          if (neighbor.walkable) {
+            // Euclidean distance
+            const dist = Math.hypot(xOffset, zOffset);
+            if (dist < minDistance) {
+              minDistance = dist;
+              nearest = neighbor;
+            }
+          }
+        }
+      }
+    }
+
+    return nearest;
+  }
+
   public findPath(start: THREE.Vector3, end: THREE.Vector3): THREE.Vector3[] {
-    const startNode = this.getNodeFromWorld(start);
-    const targetNode = this.getNodeFromWorld(end);
+    let startNode = this.getNodeFromWorld(start);
+    let targetNode = this.getNodeFromWorld(end);
+
+    if (startNode && !startNode.walkable) {
+        startNode = this.findNearestWalkableNode(startNode);
+    }
+    if (targetNode && !targetNode.walkable) {
+        targetNode = this.findNearestWalkableNode(targetNode);
+    }
 
     if (!startNode || !targetNode || !startNode.walkable || !targetNode.walkable) {
       return [];
