@@ -29,10 +29,47 @@ export class FlyNeuralNetwork {
     this.initWeights();
   }
 
+  private validateAndProcessWeights(data: any): number[][] {
+    if (!data || !data.weights || !Array.isArray(data.weights)) {
+      throw new Error('Connectome matrix corrupted: Expected 42x42 numeric matrix');
+    }
+
+    const weights = data.weights;
+    if (weights.length !== 42) {
+      throw new Error('Connectome matrix corrupted: Expected 42x42 numeric matrix');
+    }
+
+    const processedMatrix: number[][] = [];
+    for (let i = 0; i < 42; i++) {
+      const row = weights[i];
+      if (!row || !Array.isArray(row) || row.length !== 42) {
+        throw new Error('Connectome matrix corrupted: Expected 42x42 numeric matrix');
+      }
+
+      const processedRow: number[] = [];
+      for (let j = 0; j < 42; j++) {
+        const val = row[j];
+        if (typeof val !== 'number' || isNaN(val)) {
+          throw new Error('Connectome matrix corrupted: Expected 42x42 numeric matrix');
+        }
+        // Synaptic polarity correction: Delta7 are inhibitory
+        processedRow.push(-1.0 * Math.abs(val));
+      }
+      processedMatrix.push(processedRow);
+    }
+
+    return processedMatrix;
+  }
+
   public initWeights(matrixJSON?: any): void {
     const data = matrixJSON || cxWeightsData;
 
-    this.numNeurons = data.metadata.neuron_count || 42;
+    this.numNeurons = data.metadata?.neuron_count || 42;
+    if (this.numNeurons !== 42) {
+        throw new Error('Connectome matrix corrupted: Expected 42x42 numeric matrix');
+    }
+
+    this.weightsMatrix = this.validateAndProcessWeights(data);
 
     // Group neurons into left and right Delta7 hemispheres
     this.leftDelta7 = [];
@@ -43,20 +80,6 @@ export class FlyNeuralNetwork {
         } else {
             this.rightDelta7.push(i);
         }
-    }
-
-    this.weightsMatrix = [];
-    for (let i = 0; i < this.numNeurons; i++) {
-      const row = [...(data.weights[i] || new Array(this.numNeurons).fill(0))];
-      // Synaptic polarity correction: Delta7 are inhibitory
-      for (let j = 0; j < this.numNeurons; j++) {
-          row[j] = -1.0 * row[j];
-      }
-      this.weightsMatrix.push(row);
-    }
-
-    if (this.numNeurons !== 42 || this.weightsMatrix.length !== 42) {
-      throw new Error("[FlyNeuralNetwork] Connectome matrix corrupted: 42x42 Delta7 matrix required.");
     }
 
     this.membranePotentials = new Float32Array(this.numNeurons);
