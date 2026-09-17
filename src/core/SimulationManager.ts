@@ -358,13 +358,25 @@ export class SimulationManager {
   }
 
   public prepareEnvironment(walkableMesh: THREE.Mesh, obstacles: THREE.Object3D[]): void {
-    const staticObstacles = obstacles.filter(obj =>
-      obj.userData.isObstacle === true &&
-      obj.userData.isStatic === true &&
-      !obj.userData.isDynamic &&
-      !obj.userData.isRobot
-    );
-    this.aStar.buildGridFromScene(walkableMesh, staticObstacles);
+    const staticObstacleMeshes: THREE.Object3D[] = [];
+
+    obstacles.forEach((obj) => {
+      obj.updateMatrixWorld(true);
+      obj.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const isDynamic = child.userData.isDynamic === true || obj.userData.isDynamic === true;
+          const isRobot = child.userData.isRobot === true || obj.userData.isRobot === true;
+          const isObstacle = child.userData.isObstacle === true || obj.userData.isObstacle === true;
+
+          // 움직이는 객체(동적 장애물, 로봇)는 경로 생성 시 완전히 무시
+          if (isObstacle && !isDynamic && !isRobot) {
+            staticObstacleMeshes.push(child);
+          }
+        }
+      });
+    });
+
+    this.aStar.buildGridFromScene(walkableMesh, staticObstacleMeshes);
   }
 
   public start(): void {
