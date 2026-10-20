@@ -4,12 +4,15 @@ import { AssetLoader } from './core/AssetLoader';
 import { RobotController } from './core/RobotController';
 import { SimulationManager } from './core/SimulationManager';
 import { ControlPanel } from './ui/ControlPanel';
+import { DragDropController } from './core/DragDropController';
+import { SimState } from './types/index';
 
 let viewer: Viewer3D;
 let assetLoader: AssetLoader;
 let robot: RobotController;
 let simManager: SimulationManager;
 let ui: ControlPanel;
+let dragDropController: DragDropController;
 
 let isSettingStart = false;
 let isSettingEnd = false;
@@ -39,6 +42,11 @@ function init() {
   // Initialize Simulation Manager
   simManager = new SimulationManager(viewer, robot);
 
+  // Initialize DragDropController dummy, will update when walking plane changes
+  const dummyPlane = new THREE.Mesh();
+  dragDropController = new DragDropController(canvas, viewer.camera, viewer.scene, viewer.controls, dummyPlane);
+  dragDropController.init();
+
   bindEvents();
 
   // Start loop
@@ -54,7 +62,39 @@ function bindEvents() {
 
   ui.onPresetSelect = async (preset) => {
     await simManager.loadPreset(preset);
+
+    // For Custom Builder, enable drag drop using the new floor
+    if (preset === 'CUSTOM_BUILDER') {
+      const floorMesh = viewer.getTestbedObjects().find(obj => obj.userData.isWalkable) as THREE.Mesh;
+      if (floorMesh) {
+        dragDropController.updateWalkablePlane(floorMesh);
+        dragDropController.setEnabled(true);
+      }
+    } else {
+      dragDropController.setEnabled(false);
+    }
   };
+
+  dragDropController.onDragEnd = (obj) => {
+    if (obj.userData.isDynamic) {
+        simManager.updateDynamicObstacleAnchor(obj);
+    }
+  };
+
+  // Toolbar bindings
+  const btnAddStaticBlock = document.getElementById('btn-add-static-block');
+  if (btnAddStaticBlock) {
+    btnAddStaticBlock.addEventListener('click', () => {
+      simManager.createStaticBlock();
+    });
+  }
+
+  const btnAddDynamicObstacle = document.getElementById('btn-add-dynamic-obstacle');
+  if (btnAddDynamicObstacle) {
+    btnAddDynamicObstacle.addEventListener('click', () => {
+      simManager.createDynamicObstacle();
+    });
+  }
 
   ui.onFileSelect = async (file) => {
     try {
@@ -95,25 +135,34 @@ function bindEvents() {
   ui.onSetStartToggle = (active) => {
     isSettingStart = active;
     viewer.controls.enabled = !active && !isSettingEnd;
+    if (active) dragDropController.setEnabled(false);
+    else dragDropController.setEnabled(simManager.state !== SimState.RUNNING);
   };
 
   ui.onSetEndToggle = (active) => {
     isSettingEnd = active;
     viewer.controls.enabled = !active && !isSettingStart;
+    if (active) dragDropController.setEnabled(false);
+    else dragDropController.setEnabled(simManager.state !== SimState.RUNNING);
   };
 
   ui.onSimStart = () => {
     simManager.start();
+    dragDropController.setEnabled(false);
   };
 
   ui.onSimReset = () => {
     simManager.reset();
+    if (!isSettingStart && !isSettingEnd) {
+        dragDropController.setEnabled(true);
+    }
   };
 
   // Viewer Interaction (Raycasting for Start/End)
   const canvas = document.getElementById('viewport-canvas') as HTMLCanvasElement;
   canvas.addEventListener('click', (event) => {
     if (!isSettingStart && !isSettingEnd) return;
+    if (dragDropController.getIsDragging()) return; // MutEx
 
     // Calculate mouse position relative to canvas
     const rect = canvas.getBoundingClientRect();

@@ -21,7 +21,7 @@ export class ControlPanel {
   // Callbacks
   public onModeChange?: (mode: NavigationMode) => void;
   public onFileSelect?: (file: File) => void;
-  public onPresetSelect?: (preset: 'SINGLE_MAZE' | 'PARALLEL_RACE') => void;
+  public onPresetSelect?: (preset: 'SINGLE_MAZE' | 'PARALLEL_RACE' | 'CUSTOM_BUILDER') => void;
   public onSetStartToggle?: (active: boolean) => void;
   public onSetEndToggle?: (active: boolean) => void;
   public onSimStart?: () => void;
@@ -58,6 +58,7 @@ export class ControlPanel {
         <h2>[TESTBED LOADER]</h2>
         <button id="btn-load-preset1">📂 [1차] 단일 미로 테스트</button>
         <button id="btn-load-preset2">🏁 [2차] 3-레인 병렬 레이스</button>
+        <button id="btn-load-preset3">🏗️ [3차] 미로 생성 테스트</button>
         <button id="btn-load-testbed">📂 Load 3D / JSON File</button>
         <input type="file" id="input-file-hidden" style="display: none;" accept=".glb,.gltf,.obj,.fbx,.json">
         <span id="label-testbed-info">Status: Waiting for file...</span>
@@ -91,6 +92,16 @@ export class ControlPanel {
     this.labelTestbedInfo = document.getElementById('label-testbed-info') as HTMLSpanElement;
     const btnLoadPreset1 = document.getElementById('btn-load-preset1') as HTMLButtonElement;
     const btnLoadPreset2 = document.getElementById('btn-load-preset2') as HTMLButtonElement;
+    const btnLoadPreset3 = document.getElementById('btn-load-preset3') as HTMLButtonElement;
+
+    // Create Builder Toolbar dynamically
+    const builderToolbar = document.createElement('div');
+    builderToolbar.id = 'builder-toolbar';
+    builderToolbar.innerHTML = `
+      <button id="btn-add-static-block">[블록 추가]</button>
+      <button id="btn-add-dynamic-obstacle">[장애물 추가]</button>
+    `;
+    document.body.appendChild(builderToolbar);
 
     btnLoadPreset1.addEventListener('click', () => {
       if (this.onPresetSelect) this.onPresetSelect('SINGLE_MAZE');
@@ -102,6 +113,14 @@ export class ControlPanel {
       if (this.onPresetSelect) this.onPresetSelect('PARALLEL_RACE');
       this.labelTestbedInfo.textContent = 'Current: [2차] 3-레인 병렬 레이스';
       this.setParallelMode(true);
+      document.getElementById('builder-toolbar')!.style.display = 'none';
+    });
+
+    btnLoadPreset3.addEventListener('click', () => {
+      if (this.onPresetSelect) this.onPresetSelect('CUSTOM_BUILDER');
+      this.labelTestbedInfo.textContent = 'Current: [3차] 미로 생성 테스트';
+      this.setParallelMode(false);
+      document.getElementById('builder-toolbar')!.style.display = 'flex';
     });
 
     this.btnSetStart = document.getElementById('btn-set-start') as HTMLButtonElement;
@@ -216,6 +235,13 @@ export class ControlPanel {
     this.txtCoordsInfo.innerHTML = `Start: ${startStr}<br>End: ${endStr}`;
 
     this.btnSimStart.disabled = !canStart || state === SimState.RUNNING;
+
+    const builderToolbar = document.getElementById('builder-toolbar');
+    if (builderToolbar) {
+      const isRunning = state === SimState.RUNNING;
+      (document.getElementById('btn-add-static-block') as HTMLButtonElement).disabled = isRunning;
+      (document.getElementById('btn-add-dynamic-obstacle') as HTMLButtonElement).disabled = isRunning;
+    }
   }
 
   public setTestbedInfo(info: string) {
