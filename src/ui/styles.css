@@ -134,3 +134,40 @@ button:disabled {
 .hud-green { color: #00ff66; }
 .hud-red { color: #ff3344; font-weight: 700; }
 .hud-gray { color: #94a3b8; }
+
+#builder-toolbar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  display: none;
+  gap: 12px;
+  background: rgba(18, 24, 38, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+}
+
+#builder-toolbar button {
+  background-color: #4a4a4a;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: sans-serif;
+  transition: background-color 0.2s;
+  width: auto;
+}
+
+#builder-toolbar button:hover {
+  background-color: #5a5a5a;
+}
+
+#builder-toolbar button:disabled {
+  background-color: #333;
+  color: #777;
+  cursor: not-allowed;
+}

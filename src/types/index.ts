@@ -40,7 +40,17 @@ export interface RobotConfig { bodyColor?: string; cameraColor?: string; rtkAnte
 export type MotionSpeedMultiplier = any;
 export type RobotMotionStatus = any;
 
-export type TestbedPreset = 'SINGLE_MAZE' | 'PARALLEL_RACE';
+export type TestbedPreset = 'SINGLE_MAZE' | 'PARALLEL_RACE' | 'CUSTOM_BUILDER';
+
+export interface DynamicObstacleItem {
+  id: string;
+  mesh: THREE.Mesh;
+  anchorPos: THREE.Vector3; // 드래그 완료 후 안착된 기준 좌표
+  axis: 'X' | 'Z';          // 왕복 축
+  amplitude: number;        // 왕복 진폭 (기본값: 1.5m)
+  period: number;           // 주기 (기본값: 3.5s)
+  phase: number;            // 위상각 (기본값: 0)
+}
 
 export interface TelemetryData {
   agentId: 'astar' | 'fly' | 'hybrid';

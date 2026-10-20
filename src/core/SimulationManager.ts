@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { NavigationMode, SimState, TestbedPreset, AgentContext, TelemetryData } from '../types/index';
+import { NavigationMode, SimState, TestbedPreset, AgentContext, TelemetryData, DynamicObstacleItem } from '../types/index';
 import { CONSTANTS } from '../types/constants';
 import { Viewer3D } from './Viewer3D';
 import { RobotController } from './RobotController';
 import { AStarPlanner } from '../algorithms/AStarPlanner';
 import { FlyNeuralNetwork } from '../algorithms/FlyNeuralNetwork';
 import { HybridNavigator } from '../algorithms/HybridNavigator';
-import { TestbedGenerator, DynamicObstacle } from './TestbedGenerator';
+import { TestbedGenerator } from './TestbedGenerator';
 import { HUDPanel } from '../ui/HUDPanel';
 
 export class SimulationManager {
@@ -23,6 +23,7 @@ export class SimulationManager {
   private primaryRobot: RobotController;
   private aStar: AStarPlanner;
   private flyNet: FlyNeuralNetwork;
+  private walkablePlane: THREE.Mesh | null = null;
   private hybridNav: HybridNavigator;
 
   // State vars
@@ -38,7 +39,7 @@ export class SimulationManager {
   // Callbacks
   public onStateChange?: (state: SimState) => void;
 
-  private dynamicObstacles: DynamicObstacle[] = [];
+  private dynamicObstacles: any[] = [];
 
   private resolveDynamicCollisions(dt: number, robot: RobotController): void {
     const robotPos = robot.getPosition();
@@ -171,6 +172,54 @@ export class SimulationManager {
       }];
 
       this.changeState(SimState.READY);
+
+    } else if (preset === 'CUSTOM_BUILDER') {
+      this.hudPanel.setMode(false);
+
+      // Create 20x20 floor
+      const floorGeo = new THREE.PlaneGeometry(20, 20);
+      floorGeo.rotateX(-Math.PI / 2);
+      const floorMat = new THREE.MeshBasicMaterial({ color: 0xdddddd });
+
+      const gridHelper = new THREE.GridHelper(20, 20, 0x000000, 0xaaaaaa);
+      gridHelper.position.y = 0.01;
+
+      const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+      floorMesh.userData = { isWalkable: true };
+
+      this.viewer.addTestbedObject(floorMesh);
+      this.viewer.addTestbedObject(gridHelper);
+
+      this.walkablePlane = floorMesh;
+
+      // Spawn single agent at (0, 0, -8)
+      const primaryRobot = this.primaryRobot;
+      primaryRobot.mesh.position.set(0, 0, -8.0);
+      this.viewer.scene.add(primaryRobot.mesh);
+
+      const startPos = new THREE.Vector3(0, 0, -8.0);
+      const endPos = new THREE.Vector3(0, 0, 8.0);
+
+      this.agents = [{
+        id: 'hybrid',
+        name: 'Builder Agent',
+        mode: this.mode,
+        robot: primaryRobot,
+        startPos: startPos.clone(),
+        endPos: endPos.clone(),
+        currentPath: [],
+        waypointIndex: 0,
+        state: SimState.READY,
+        finishTime: null,
+        telemetry: {} as TelemetryData
+      }];
+
+      this.setStartPoint(startPos);
+      this.setEndPoint(endPos);
+
+      // Note: prepareEnvironment is called in start() (Lazy Grid Building)
+      this.changeState(SimState.READY);
+
     } else if (preset === 'PARALLEL_RACE') {
       this.hudPanel.setMode(true);
 
@@ -430,10 +479,60 @@ export class SimulationManager {
     });
   }
 
+  public createStaticBlock(pos: THREE.Vector3 = new THREE.Vector3(0, 0.5, 0)): THREE.Mesh {
+    const geo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x9ca3af });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    mesh.userData = { isObstacle: true, isStatic: true, isDynamic: false, isDraggable: true };
+    this.viewer.addCustomObject(mesh);
+    return mesh;
+  }
+
+  public updateDynamicObstacleAnchor(mesh: THREE.Object3D): void {
+    const obs = this.dynamicObstacles.find((o: any) => o.mesh === mesh);
+    if (obs && obs.anchorPos) {
+      obs.anchorPos.copy(mesh.position);
+    }
+  }
+
+  public createDynamicObstacle(pos: THREE.Vector3 = new THREE.Vector3(0, 0.5, 0)): THREE.Mesh {
+    const geo = new THREE.CylinderGeometry(0.3, 0.3, 1.0, 16);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    mesh.userData = { isObstacle: true, isStatic: false, isDynamic: true, isDraggable: true };
+
+    const item: DynamicObstacleItem = {
+      id: `dyn_obs_${Date.now()}`,
+      mesh: mesh,
+      anchorPos: mesh.position.clone(),
+      axis: 'X',
+      amplitude: 1.5,
+      period: 3.5,
+      phase: 0
+    };
+
+    this.dynamicObstacles.push(item);
+    this.viewer.addCustomObject(mesh);
+    return mesh;
+  }
+
   public start(): void {
     if (this.state !== SimState.READY) return;
 
-    if (this.currentPreset === 'SINGLE_MAZE') {
+    if (this.currentPreset === 'CUSTOM_BUILDER' && this.walkablePlane) {
+      // Lazy Grid Building
+      const staticBlocks: THREE.Object3D[] = [];
+      this.viewer.customObjectsGroup.children.forEach(child => {
+        if (child.userData.isStatic) {
+          staticBlocks.push(child);
+        }
+      });
+      this.prepareEnvironment(this.walkablePlane, staticBlocks);
+    }
+
+    if (this.currentPreset === 'SINGLE_MAZE' || this.currentPreset === 'CUSTOM_BUILDER') {
       if (!this.startPoint || !this.endPoint) return;
       const agent = this.agents[0];
 
@@ -521,7 +620,18 @@ export class SimulationManager {
 
     // 1. Update dynamic objects
     for (const obs of this.dynamicObstacles) {
-      obs.update(clampedDt);
+      if (typeof obs.update === 'function') {
+        obs.update(clampedDt);
+      } else {
+        // Handle Custom Builder DynamicObstacleItem
+        const t = this.simulationTime;
+        if (obs.axis === 'X') {
+          obs.mesh.position.x = obs.anchorPos.x + Math.sin(t * (2 * Math.PI / obs.period) + obs.phase) * obs.amplitude;
+        } else {
+          obs.mesh.position.z = obs.anchorPos.z + Math.sin(t * (2 * Math.PI / obs.period) + obs.phase) * obs.amplitude;
+        }
+        obs.mesh.updateMatrixWorld(true);
+      }
     }
 
     // 2. Prepare Obstacles Array

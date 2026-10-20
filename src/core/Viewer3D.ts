@@ -15,6 +15,7 @@ export class Viewer3D {
 
   // Testbed elements tracking
   private testbedGroup: THREE.Group = new THREE.Group();
+  public customObjectsGroup: THREE.Group = new THREE.Group();
 
   private pathLines: Map<string, THREE.Line> = new Map();
 
@@ -33,6 +34,7 @@ export class Viewer3D {
 
     this.setupLights();
     this.scene.add(this.testbedGroup);
+    this.scene.add(this.customObjectsGroup);
   }
 
   public init(canvasElement: HTMLCanvasElement): void {
@@ -152,6 +154,8 @@ export class Viewer3D {
     });
     this.testbedGroup.clear();
 
+    this.clearCustomObjects();
+
     // Markers are separate, just remove them if needed, but not cleared on testbed clear unless desired.
     // For now, let's remove markers when testbed is cleared.
     if (this.startMarker) {
@@ -171,7 +175,23 @@ export class Viewer3D {
   }
 
   public getTestbedObjects(): THREE.Object3D[] {
-      return this.testbedGroup.children;
+      return [...this.testbedGroup.children, ...this.customObjectsGroup.children];
+  }
+
+  public addCustomObject(obj: THREE.Object3D): void {
+    this.customObjectsGroup.add(obj);
+  }
+
+  public removeCustomObject(obj: THREE.Object3D): void {
+    this.customObjectsGroup.remove(obj);
+    AssetLoader.disposeObject(obj);
+  }
+
+  public clearCustomObjects(): void {
+    this.customObjectsGroup.children.forEach(child => {
+      AssetLoader.disposeObject(child);
+    });
+    this.customObjectsGroup.clear();
   }
 
   public setStartMarker(pos: THREE.Vector3) {
