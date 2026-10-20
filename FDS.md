@@ -6,7 +6,7 @@
 
 * **문서명:** Functional Design Specification (FDS) - Bio-Nav 4-Legged Simulation Sandbox
 * **버전:** `v0.3.4` #수정
-* **최종 수정일:** 2026-09-17 #수정
+* **최종 수정일:** 2026-10-20 #수정
 * **작성자 (PM):** Gemini
 * **검토자 (기획/테스트):** 사용자 (User)
 * **개발자 (코더):** Jules
@@ -47,6 +47,7 @@ bio-nav-sandbox/
     │   └── index.ts               # 전역 인터페이스 및 Enum 정의
     ├── core/
     │   ├── Viewer3D.ts            # Three.js 씬, 카메라, 렌더러, 조명, 리사이즈
+    │   ├── DragDropController.ts  # 포인터 이벤트 기반 오브젝트 드래그 앤 드롭 및 바운더리 제어기 #수정
     │   ├── AssetLoader.ts         # 3D(GLB, OBJ, FBX) 및 JSON 통합 로더/파서
     │   ├── RobotController.ts     # 키네마틱 이동, 애니메이션 믹서, 레이캐스터 센서
     │   └── SimulationManager.ts   # 시뮬레이션 상태 머신, 루프 틱 오케스트레이터
@@ -99,15 +100,17 @@ bio-nav-sandbox/
 +-----------------------------------+---------------------------------------------------+
 | BIO-NAV CONTROLLER                |  3D VIEWPORT CANVAS (#viewport-canvas)            |
 |                                   |                                                   |
-| [NAVIGATION MODE]                 |               [HUD OVERLAY: 3-CARD TELEMETRY]     |
-|  (•) A* Global Planner            |               +---------+ +---------+ +---------+ |
-|  ( ) Fly CX SNN (Reactive)        |               |Lane1:A* | |Lane2:Fly| |Lane3:Hyb| |
-|  ( ) Hybrid (A* + CX)             |               +---------+ +---------+ +---------+ |
-|                                   |                                                   |
-| [TESTBED LOADER]                  |                   [End Goal Line (Z=22m)]         |
-|  [📂 [1차] 단일 미로 테스트]      |                      |         |         |        |
-|  [🏁 [2차] 3-레인 병렬 레이스]    |                      |         |         |        |
-|  [📂 Custom 3D / JSON File]       |                 [Lane 1]  [Lane 2]  [Lane 3]      |
+| [NAVIGATION MODE]                 |               [BUILDER TOOLBAR: #builder-toolbar] | #수정
+|  (•) A* Global Planner            |               [+ 블록 추가]  [+ 장애물 추가]      | #수정
+|  ( ) Fly CX SNN (Reactive)        |                                                   |
+|  ( ) Hybrid (A* + CX)             |               [HUD OVERLAY: 3-CARD TELEMETRY]     | #수정
+|                                   |               +---------+ +---------+ +---------+ |
+| [TESTBED LOADER]                  |               |Lane1:A* | |Lane2:Fly| |Lane3:Hyb| |
+|  [📂 [1차] 단일 미로 테스트]      |               +---------+ +---------+ +---------+ |
+|  [🏁 [2차] 3-레인 병렬 레이스]    |                                                   |
+|  [🛠️ [3차] 미로 생성 테스트]     |                   [End Goal Line (Z=22m)]         | #수정
+|  [📂 Custom 3D / JSON File]       |                      |         |         |        |
+|                                   |                 [Lane 1]  [Lane 2]  [Lane 3]      |
 |  Status: PARALLEL_RACE            |                   (A*)      (Fly)   (Hybrid)      |
 |                                   |                                                   |
 | [WAYPOINTS & CONTROL]             |                 [Robot1]  [Robot2]  [Robot3]      |
@@ -132,7 +135,11 @@ bio-nav-sandbox/
 |  | `radio-mode-hybrid` | `<input type="radio">` | `NavigationMode.HYBRID` 선택 (기본값, `PARALLEL_RACE` 활성화 시 `disabled = true` 잠금) |
 | **Loader** | `btn-load-preset-1` | `<button>` | [1차] 단일 미로 환경 로드 및 모드 라디오 버튼 잠금 해제 |
 |  | `btn-load-preset-2` | `<button>` | [2차] 3-레인 병렬 레이스 절차적 생성, 자동 `READY` 전환 및 모드 라디오 버튼 비활성화 |
+|  | `btn-load-preset-3` | `<button>` | [3차] 미로 생성 테스트 로드, 20m×20m 바닥 생성, 빌더 툴바 표시 및 모드/핀 설정 활성화 #수정 |
 |  | `btn-load-testbed` | `<button>` | 클릭 시 hidden file input 트리거 |
+| **Builder Toolbar** | `builder-toolbar` | `<div>` | 뷰포트 우측 상단 고정 플로팅 툴바 (3차 모드 활성화 시 노출) #수정 |
+|  | `btn-add-static-block` | `<button>` | 클릭 시 회색 1m 정적 박스 블록 추가 (클릭 유지 시 파란색 활성화 및 드래그 이동) #수정 |
+|  | `btn-add-dynamic-obstacle` | `<button>` | 클릭 시 적색 왕복 동적 원통 장애물 추가 (클릭 유지 시 드래그 이동) #수정 |
 |  | `input-file-hidden` | `<input type="file">` | `.glb,.gltf,.obj,.fbx,.json` 허용 |
 |  | `label-testbed-info` | `<span>` | 로드된 파일명, 프리셋 명칭 및 메시 정보 표시 |
 | **HUD (Telemetry)** | `hud-overlay` | `<div>` | 뷰포트 우측 상단 고정 플로팅 컨테이너 |
@@ -239,12 +246,38 @@ bio-nav-sandbox/
 
 4. **42-Delta7 생물학적 단일 커넥톰 SNN 구동:**
    * `cx_weights.json`의 42개 Delta7 뉴런을 원뇌교(PB) 좌반구(0~20번, 21개) 및 우반구(21~41번, 21개) 기능군으로 분할.
-   * 42×42 행렬 무결성 검증 시 0으로 채우는 Mocking 폴백을 완전 배제하고, 단 하나의 행/열 또는 요소라도 결손 시 즉시 에러(`Connectome matrix corrupted: Expected 42x42 numeric matrix`)를 발생시키는 엄격한 Fail-Fast 체계 확립. #수정
+   * 42×42 행렬 무결성 검증 시 0으로 채우는 Mocking 폴백을 완전 배제하고, 단 하나의 행/열 또는 요소라도 결손 시 즉시 에러(`Connectome matrix corrupted: Expected 42x42 numeric matrix`)를 발생시키는 엄격한 Fail-Fast 체계 확립.
    * Three.js 전방($-Z$) 좌표계에 맞춘 $\theta_{goal}$ 오차 전류($I_{goal}$, 게인 $\approx 10.0$)와 센서 반발 전류($I_{rep}$)를 LIF 막전위 수준에서 합성하여 모터 각속도 산출.
    * 전방 센서 감지 거리 $\ge 0.8$ 개활지 진입 시 순항 속도 공식($v_{base} \times \max(0.2, \cos(\Delta\theta))$)을 인가하여 도착선($Z=22\text{m}$) 직진 주행 보장.
 
 5. **영구 HUD 텔레메트리 스트리밍 및 래치:**
    * `update()` 루프 내에서 완주 에이전트 건너뛰기 없이 텔레메트리 지속 수집. 완주(`SimState.SUCCESS`) 시 최종 랩타임(`finishTime`)을 'FINISHED' 상태로 고정 유지하며, [RESET] 시에만 초기화.
+
+
+### Phase 5: [3차] 인터랙티브 맵 빌더 및 런타임 드래그 앤 드롭 오케스트레이션 #수정
+
+1. **빌더 전용 격리 환경 초기화 (20m × 20m Sandbox):** #수정
+   - `btn-load-preset-3` 트리거 시 기존 에이전트 및 씬 객체를 완전 클린업(`cleanupAgents()`, `clearTestbed()`). #수정
+   - $20.0\text{m} \times 20.0\text{m}$ 크기의 지면 메시(`userData.isWalkable = true`)를 생성하고, 사용자 배치 객체를 격리 관리할 `customObjectsGroup`을 씬에 등록. #수정
+   - 단일 로봇을 $(0, 0, -8.0)$에 배치하고 기본 목적지를 $(0, 0, 8.0)$으로 자동 할당하며, 네비게이션 모드 라디오 버튼 및 Start/End 핀 설정 기능을 잠금 해제. #수정
+
+2. **포인터 이벤트 기반 드래그 앤 드롭 상태 머신 (`DragDropController`):** #수정
+   - `pointerdown`: 씬 레이캐스팅을 통해 `userData.isDraggable === true`인 객체를 선별. 포착 즉시 `OrbitControls.enabled = false`로 카메라 회전 잠금. 정적 블록(`isStatic`) 선택 시 원래 색상(`0x9ca3af`)을 백업하고 활성 파란색(`0x3b82f6`)으로 마티리얼 변경. #수정
+   - `pointermove`: 드래그 타겟이 존재할 때 바닥 지면 레이캐스팅으로 $(X, Z)$ 교차점을 실시간 추적. 바닥 이탈을 방지하기 위해 $X, Z \in [-9.5\text{m}, +9.5\text{m}]$ 범위로 하드 클램핑하며, $Y$ 좌표는 관통 방지를 위해 지상 절반 높이($+0.5\text{m}$)로 고정. #수정
+   - `pointerup` / `pointercancel`: 정적 블록 마티리얼을 회색(`0x9ca3af`)으로 즉시 복귀. 동적 장애물은 최종 드롭 위치를 신규 왕복 기준점(`anchorPos`)으로 갱신. `updateMatrixWorld(true)` 호출, 타겟 래치 해제 및 카메라 조작 복원(`controls.enabled = true`). #수정
+
+3. **지연된 환경 빌드 (Lazy Grid Building):** #수정
+   - 블록 추가 및 드래그 중에는 A* 그리드 연산을 일체 수행하지 않음. #수정
+   - 사용자가 배치를 완료하고 `btn-sim-start`([▶ START SIMULATION])를 누르는 순간 씬 내의 정적 장애물(`isStatic && !isDynamic`)을 평탄화 수집하여 `prepareEnvironment()`를 1회 실행, A* 그리드 생성 및 경로를 확정. #수정
+
+4. **동적 장애물 런타임 왕복 거동 분리:** #수정
+   - 대기 상태(`IDLE`, `READY`)에서는 동적 장애물의 위치 갱신을 정지하여 안정적인 배치 및 드래그 보장. #수정
+   - 시뮬레이션 주행 상태(`SimState.RUNNING`)에서만 누적 시간 $t$를 기반으로 `anchorPos.x + Math.sin(t * (2 * Math.PI / period)) * amplitude` 공식을 통해 왕복 운동 활성화 및 레이캐스트 센서 충돌 회피 연동. #수정
+
+5. **인터랙션 상호 배제 (MutEx):** #수정
+   - Start/End 핀 마킹 모드 활성화 시 블록 드래그 앤 드롭 기능 전면 비활성화. #수정
+   - 블록 드래그 중(`isDragging === true`)에는 캔버스 핀 마킹 클릭 이벤트 조기 차단(Early Return). #수정
+   - 시뮬레이션 주행 중(`SimState.RUNNING`)에는 핀 마킹, 블록 드래그, 빌더 툴바 버튼을 일괄 잠금 처리. #수정
 
 ---
 
@@ -313,7 +346,17 @@ export interface TestbedConfigJSON {
   }>;
 }
 
-export type TestbedPreset = 'SINGLE_MAZE' | 'PARALLEL_RACE';
+export type TestbedPreset = 'SINGLE_MAZE' | 'PARALLEL_RACE' | 'CUSTOM_BUILDER'; #수정
+
+export interface DynamicObstacleItem { #수정
+  id: string; #수정
+  mesh: THREE.Mesh; #수정
+  anchorPos: THREE.Vector3; #수정
+  axis: 'X' | 'Z'; #수정
+  amplitude: number; #수정
+  period: number; #수정
+  phase: number; #수정
+} #수정
 
 export interface TelemetryData {
   agentId: 'astar' | 'fly' | 'hybrid';
@@ -379,6 +422,14 @@ export const CONSTANTS = {
   * `clearTestbed(): void`
   * `drawPath(pathId: string, waypoints: THREE.Vector3[], colorHex?: number): void`
   * `clearPath(pathId?: string): void`
+  * `addCustomObject(obj: THREE.Object3D): void` #수정
+  * `removeCustomObject(obj: THREE.Object3D): void` #수정
+  * `clearCustomObjects(): void` #수정
+
+- **`DragDropController`** #수정
+  * `init(domElement: HTMLElement, camera: THREE.Camera, scene: THREE.Scene, controls: any, walkablePlane: THREE.Mesh): void` #수정
+  * `setEnabled(enabled: boolean): void` #수정
+  * `onDragEnd?: (obj: THREE.Object3D) => void` #수정
 
 * **`AssetLoader`**
 * `loadModelFromFile(file: File): Promise<THREE.Group THREE.Mesh |>`
@@ -420,6 +471,8 @@ export const CONSTANTS = {
   * `start(): void`
   * `reset(): void`
   * `update(dt: number): void`
+  * `createStaticBlock(pos?: THREE.Vector3): THREE.Mesh` #수정
+  * `createDynamicObstacle(pos?: THREE.Vector3): THREE.Mesh` #수정
 
 
 * **`HUDPanel`**
@@ -441,11 +494,13 @@ export const CONSTANTS = {
 | **E-4** | Fly CX 전방 대칭 장애물 교착 (U자형 정면 진입) | 좌/우 레이 거리 차이가 $0.05\text{m}$ 미만이고 전방이 막힘 | 각속도 명령에 난수 노이즈(`+0.5 rad/s` 우측 편향)를 강제 주입하여 대칭 회로 락 해제. |
 | **E-5** | 백그라운드 탭 렌더링 프레임 드롭 (dt 폭증 현상) | `clock.getDelta()` 값이 $0.1\text{초}$ 초과 | `dt = Math.min(dt, 0.05)`로 강제 클램핑하여 로봇이 벽을 뚫고 지나가는 터널링 방지. |
 | **E-6** | 동적 장애물이 로봇의 측·후방 사각지대에서 돌진 | 레이캐스터 미감지 및 Bounding Sphere 거리 $\le 0.65\text{m}$ 검출 | `linearVelocity = 0` 강제 클램프 및 장애물 역방향 탈출 각속도 즉시 인가. |
-| **E-7** | `cx_weights.json`의 단일 Delta7 뉴런 데이터셋 구조 | `numNeurons !== 42` 또는 가중치 행렬이 42x42가 아니거나 비수치 데이터 포함 | 가중치 누락 시 0으로 채우는(0-fill) Mocking 안티패턴을 원천 금지하고, 규격 불일치 감지 즉시 `Connectome matrix corrupted: Expected 42x42 numeric matrix` 예외를 발생시켜 시스템 중단. 정상 검증 통과 시에만 좌/우 21개 반구로 분할하여 GABAergic 음수 가중치 적용. #수정 |
+| **E-7** | `cx_weights.json`의 단일 Delta7 뉴런 데이터셋 구조 | `numNeurons !== 42` 또는 가중치 행렬이 42x42가 아니거나 비수치 데이터 포함 | 가중치 누락 시 0으로 채우는(0-fill) Mocking 안티패턴을 원천 금지하고, 규격 불일치 감지 즉시 `Connectome matrix corrupted: Expected 42x42 numeric matrix` 예외를 발생시켜 시스템 중단. 정상 검증 통과 시에만 좌/우 21개 반구로 분할하여 GABAergic 음수 가중치 적용. |
 | **E-8** | 기본 3D 로봇 에셋(`/models/default_robot.glb`) 파일 404 누락 | `loadRobot()` 호출 시 파일 미존재 감지 | Vite SPA의 기본 HTML 반환 파싱 에러를 방지하기 위해 네트워크 fetch를 생략하고, `QuadrupedRobotFactory`의 절차적 4족 보행 지오메트리를 기본 메시로 즉시 바인딩하여 씬 중단 방지. |
 | **E-9** | 최상위 컨테이너(Group)와 하위 렌더링 메시(Mesh) 계층 불일치로 정적 벽체 누락 | 최상위 노드에 `userData` 플래그 미부여 | `prepareEnvironment()`에서 `traverse`로 렌더링 메시를 전수 평탄화 수집하고, `!isDynamic && !isRobot` 네거티브 필터를 적용하여 정적 벽체가 A* 그리드에서 탈락하는 현상을 원천 방지. |
 | **E-10** | 2차 병렬 레이스 절차적 생성 시 레인 간 장애물 위치 불일치 | 레인 생성 시 `Math.random()` 개별 호출 | 단일 장애물 템플릿 배열을 사전에 정의하고 $X$ 오프셋만 가산하여 복제함으로써 3개 레인에 100% 동일한 장애물 형상 및 좌표를 확정 주입. |
 | **E-11** | 하이브리드 주행 시 전방 A* 벡터와 SNN 회피 벡터의 상쇄로 인한 스톨 현상 | $d_{min} \le 0.8\text{m}$ 구간에서 3D 벡터 합산 시 선회 토크 소실 검출 | 단순 벡터 합산을 폐기하고 A* 목표 각속도와 SNN 스파이크 차동 각속도를 가중치 $\alpha$로 직접 보간(Direct Steering Blending)하며, 전진 속도를 감속 클램프하여 유기적 회피 기동 보장. |
+| **E-12** | 런타임 맵 빌더 조작 중 객체 바닥 이탈 및 포인터 이벤트 충돌 | 바닥 메시 평면 레이캐스트 실패 또는 마킹/드래그 동시 트리거 | 포인터 이동 좌표를 바닥 경계($\pm 9.5\text{m}$)로 강제 클램핑하고, 마킹/드래그 간 상호 배타 플래그(MutEx)를 적용하여 이벤트 간섭 원천 방지. | #수정
+| **E-13** | 런타임 블록 다량 배치 중 A* 잦은 호출로 인한 브라우저 랙 | 블록 드래그마다 그리드 재구축 트리거 | 블록 이동 중 그리드 갱신을 배제하고 [▶ START SIMULATION] 트리거 시점에만 `prepareEnvironment()`를 1회 실행하는 Lazy Grid Building 적용. | #수정
 
 ---
 
